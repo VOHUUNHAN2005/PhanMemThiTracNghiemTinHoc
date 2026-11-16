@@ -37,7 +37,7 @@ def get_current_user(user_data: dict = Depends(verify_firebase_token)):
     return {
         "uid": user_data.get("uid"),
         "email": user_data.get("email"),
-        "message": "Xác thực Firebase thành công!",
+        "message": "Xác thực Firebase thành công!aaaaa",
     }
 @app.get("/api/chu-de")
 def get_danh_sach_chu_de(db: Session = Depends(get_db)):
