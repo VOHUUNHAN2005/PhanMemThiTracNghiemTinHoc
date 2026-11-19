@@ -1,45 +1,27 @@
-import firebase_admin
-from firebase_admin import auth, credentials
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from database import get_db
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+import os
 
-cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
-
-app = FastAPI(title="IT Quiz App API")
-security = HTTPBearer()
+from app.routers import friends, topics, practice_session, official_exam
 
 
-def verify_firebase_token(
-    res: HTTPAuthorizationCredentials = Depends(security),
-):
-    token = res.credentials
-    try:
-        decoded_token = auth.verify_id_token(token)
-        return decoded_token
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token không hợp lệ hoặc đã hết hạn.",
-        )
-
-
-@app.get("/")
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers import auth
+from fastapi.staticfiles import StaticFiles
+os.makedirs("static/upload_avatars", exist_ok=True)
+app = FastAPI(title="IT Quiz App API", version="1.0.0")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(friends.router)
+app.include_router(auth.router)
+app.include_router(topics.router)
+app.include_router(practice_session.router)
+app.include_router(official_exam.router)
+@app.get("/", tags=["Health Check"])
 def health_check():
     return {"status": "ok", "message": "IT Quiz Backend đang hoạt động!"}
-
-
-@app.get("/api/me")
-def get_current_user(user_data: dict = Depends(verify_firebase_token)):
-    return {
-        "uid": user_data.get("uid"),
-        "email": user_data.get("email"),
-        "message": "Xác thực Firebase thành công!aaaaa",
-    }
-@app.get("/api/chu-de")
-def get_danh_sach_chu_de(db: Session = Depends(get_db)):
-    result = db.execute(text("SELECT MaChuDe, TenChuDe, MoTa FROM ChuDe")).mappings().all()
-    return {"data": list(result)}
