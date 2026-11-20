@@ -1,7 +1,9 @@
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:user/core/constants/api_constants.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -21,8 +23,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePass = true;
   bool _obscureRePass = true;
 
-  static const String _baseUrl = 'http://10.0.2.2:8000';
-
   @override
   void dispose() {
     hoTenCtrl.dispose();
@@ -40,46 +40,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final pass = passCtrl.text;
     final rePass = rePassCtrl.text;
 
-    // 1. Validate cơ bản phía Client
-    if (hoTen.isEmpty || username.isEmpty || email.isEmpty || pass.isEmpty) {
+    // 1. Validate thông tin
+    if (hoTen.isEmpty ||
+        username.isEmpty ||
+        email.isEmpty ||
+        pass.isEmpty ||
+        rePass.isEmpty) {
       _showSnackBar('Vui lòng điền đầy đủ thông tin.', Colors.red);
       return;
     }
+
     if (username.length < 3) {
       _showSnackBar('Username phải có ít nhất 3 ký tự.', Colors.red);
       return;
     }
+
     if (!email.contains('@')) {
       _showSnackBar('Định dạng Email không hợp lệ.', Colors.red);
       return;
     }
+
     if (pass.length < 6) {
       _showSnackBar('Mật khẩu phải có ít nhất 6 ký tự.', Colors.red);
       return;
     }
+
     if (pass != rePass) {
       _showSnackBar('Mật khẩu xác nhận không khớp.', Colors.red);
       return;
     }
 
     setState(() => _isLoading = true);
+
     UserCredential? userCredential;
 
     try {
-      // 2. Tạo tài khoản trên Firebase Auth
-      userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 2. Tạo tài khoản Firebase Auth
+      userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
         email: email,
         password: pass,
       );
 
       final token = await userCredential.user?.getIdToken();
+
       if (token == null) {
-        throw 'Không lấy được mã xác thực từ Firebase.';
+        throw Exception('Không lấy được mã xác thực từ Firebase.');
       }
 
-      // 3. Gọi API POST /api/users/register để lưu vào SQL Server
+      // 3. Gọi API đăng ký thông qua ApiConstants
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/users/register'),
+        Uri.parse(ApiConstants.register),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -92,20 +103,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (response.statusCode != 201) {
-        // Rollback: Xóa tài khoản vừa tạo trên Firebase nếu lưu DB thất bại (ví dụ: trùng TenDangNhap)
+        // Rollback Firebase nếu lưu database thất bại
         await userCredential.user?.delete();
-        final err = jsonDecode(utf8.decode(response.bodyBytes));
-        throw err['detail'] ?? 'Đăng ký thất bại (${response.statusCode}).';
+
+        final err = jsonDecode(
+          utf8.decode(response.bodyBytes),
+        );
+
+        throw Exception(
+          err['detail'] ?? 'Đăng ký thất bại (${response.statusCode}).',
+        );
       }
 
-      // 4. Đăng xuất khỏi Firebase để người dùng đăng nhập lại từ màn Login
+      // 4. Đăng xuất để người dùng đăng nhập lại
       await FirebaseAuth.instance.signOut();
 
       if (!mounted) return;
-      _showSnackBar('Đăng ký thành công! Vui lòng đăng nhập.', Colors.green);
+
+      _showSnackBar(
+        'Đăng ký thành công! Vui lòng đăng nhập.',
+        Colors.green,
+      );
+
       Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
       String msg = 'Lỗi đăng ký: ${e.message}';
+
       if (e.code == 'email-already-in-use') {
         msg = 'Email này đã được sử dụng cho một tài khoản khác.';
       } else if (e.code == 'invalid-email') {
@@ -113,17 +136,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
       } else if (e.code == 'weak-password') {
         msg = 'Mật khẩu quá yếu.';
       }
+
       _showSnackBar(msg, Colors.red);
     } catch (e) {
       _showSnackBar(e.toString(), Colors.red);
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+      ),
     );
   }
 
@@ -140,38 +169,62 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 const Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Tạo tài khoản', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'Tạo tài khoản',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 const CircleAvatar(
                   radius: 36,
                   backgroundColor: Color(0xFFDBEAFE),
-                  child: Icon(Icons.person_outline, size: 34, color: Color(0xFF1D5CE5)),
+                  child: Icon(
+                    Icons.person_outline,
+                    size: 34,
+                    color: Color(0xFF1D5CE5),
+                  ),
                 ),
                 const SizedBox(height: 6),
-                const Text('Chọn ảnh đại diện (có thể bỏ qua)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const Text(
+                  'Chọn ảnh đại diện (có thể bỏ qua)',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
                 const SizedBox(height: 14),
                 Card(
                   color: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
                         TextField(
                           controller: hoTenCtrl,
-                          decoration: const InputDecoration(labelText: 'Họ và tên', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                            labelText: 'Họ và tên',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: userCtrl,
-                          decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                            labelText: 'Username',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: emailCtrl,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
@@ -181,8 +234,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             labelText: 'Mật khẩu',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscurePass ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                              icon: Icon(
+                                _obscurePass
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePass = !_obscurePass;
+                                });
+                              },
                             ),
                           ),
                         ),
@@ -194,8 +255,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             labelText: 'Xác nhận mật khẩu',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscureRePass ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => _obscureRePass = !_obscureRePass),
+                              icon: Icon(
+                                _obscureRePass
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscureRePass = !_obscureRePass;
+                                });
+                              },
                             ),
                           ),
                         ),
@@ -208,14 +277,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               backgroundColor: const Color(0xFF1D5CE5),
                               foregroundColor: Colors.white,
                             ),
-                            onPressed: _isLoading ? null : _handleRegister,
+                            onPressed:
+                                _isLoading ? null : _handleRegister,
                             child: _isLoading
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : const Text('Đăng ký', style: TextStyle(fontWeight: FontWeight.bold)),
+                                : const Text(
+                                    'Đăng ký',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
