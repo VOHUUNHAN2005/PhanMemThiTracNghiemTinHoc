@@ -11,7 +11,7 @@ DB_NAME = os.getenv("DB_NAME", "QuizTinHoc_DB")
 DB_DRIVER = os.getenv("DB_DRIVER", "ODBC Driver 17 for SQL Server")
 
 params = urllib.parse.quote_plus(
-    f"DRIVER={{{DB_DRIVER}}};"
+    f"DRIVER={ {DB_DRIVER}} ;"
     f"SERVER={DB_SERVER};"
     f"DATABASE={DB_NAME};"
     f"Trusted_Connection=yes;"

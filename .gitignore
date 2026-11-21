@@ -1,0 +1,47 @@
+# ==========================================
+# BẢO MẬT & CẤU HÌNH CÁ NHÂN (QUAN TRỌNG)
+# ==========================================
+.env
+*.env
+serviceAccountKey.json
+*firebase-adminsdk*.json
+
+# ==========================================
+# PYTHON / BACKEND
+# ==========================================
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# ==========================================
+# FLUTTER / DART / ANDROID / IOS
+# ==========================================
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# ==========================================
+# IDE & HỆ ĐIỀU HÀNH
+# ==========================================
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
