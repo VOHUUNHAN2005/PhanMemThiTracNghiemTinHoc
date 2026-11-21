@@ -12,7 +12,6 @@ router = APIRouter(prefix="/api/practice", tags=["Practice Session"])
 
 def _build_practice_session_payload(db: Session, ma_luot_lam: int, ma_bo_de: int, tieu_de: str, diem_dat: float):
     """Lấy toàn bộ câu hỏi kèm tiến độ đã kiểm tra (ẩn LaDapAnDung với câu chưa làm)"""
-    # 1. Lấy tất cả lựa chọn đã lưu (đã kiểm tra) của lượt làm này
     answered_rows = db.execute(
         text("""
             SELECT MaCauHoi, MaDapAn
@@ -26,7 +25,6 @@ def _build_practice_session_payload(db: Session, ma_luot_lam: int, ma_bo_de: int
     for r in answered_rows:
         user_answers_map.setdefault(r["MaCauHoi"], []).append(r["MaDapAn"])
 
-    # 2. Lấy danh sách câu hỏi và đáp án của bộ đề
     q_rows = db.execute(
         text("""
             SELECT
@@ -73,16 +71,14 @@ def _build_practice_session_payload(db: Session, ma_luot_lam: int, ma_bo_de: int
             "MaDapAn": r["MaDapAn"],
             "NoiDung": r["NoiDungDapAn"],
             "ThuTuHienThi": r["ThuTuHienThi"],
-            # Chỉ trả về đáp án đúng nếu câu này đã bấm Kiểm tra
             "LaDapAnDung": bool(r["LaDapAnDung"]) if da_kiem_tra else None,
             "_raw_is_correct": bool(r["LaDapAnDung"]),
         })
 
-    # 3. Tính kết quả đúng/sai cho các câu đã kiểm tra & tìm vị trí câu tiếp theo cần làm
     questions_list = list(questions_dict.values())
     so_cau_da_lam = 0
     so_cau_dung = 0
-    cau_tiep_theo_index = 0  # Mặc định câu đầu tiên (index 0)
+    cau_tiep_theo_index = 0
     found_unanswered = False
 
     for idx, q in enumerate(questions_list):
@@ -112,14 +108,12 @@ def _build_practice_session_payload(db: Session, ma_luot_lam: int, ma_bo_de: int
         "TongSoCau": len(questions_list),
         "SoCauDaLam": so_cau_da_lam,
         "SoCauDung": so_cau_dung,
-        "ViTriCauTiepTheo": cau_tiep_theo_index,  # Flutter nhảy thẳng tới index này (VD: câu 15 -> index 14)
+        "ViTriCauTiepTheo": cau_tiep_theo_index,
         "DanhSachCauHoi": questions_list,
     }
 
 
-# =========================================================================
-# 1. BẮT ĐẦU HOẶC TIẾP TỤC LƯỢT ÔN TẬP (Tự động khôi phục câu làm dở)
-# =========================================================================
+
 @router.post("/exams/{ma_bo_de}/start")
 def start_or_resume_practice(
     ma_bo_de: int,
@@ -143,7 +137,6 @@ def start_or_resume_practice(
     if bo_de["LoaiBoDe"] != "LUYEN_TAP":
         raise HTTPException(status_code=400, detail="Bộ đề này thuộc loại thi chính thức, không phải đề ôn tập.")
 
-    # Kiểm tra xem đã có lượt DANG_LAM chưa
     existing_attempt = db.execute(
         text("""
             SELECT MaLuotLam
@@ -188,9 +181,6 @@ def start_or_resume_practice(
     )
 
 
-# =========================================================================
-# 2. KIỂM TRA ĐÁP ÁN TỪNG CÂU (Kiểu B: Lưu đáp án & trả kết quả đúng/sai ngay)
-# =========================================================================
 @router.post("/attempts/{ma_luot_lam}/check-question")
 def check_practice_question(
     ma_luot_lam: int,
@@ -219,7 +209,6 @@ def check_practice_question(
     if attempt["TrangThai"] != "DANG_LAM":
         raise HTTPException(status_code=400, detail="Lượt ôn tập này đã kết thúc.")
 
-    # Kiểm tra câu hỏi có thuộc bộ đề này không
     q_info = db.execute(
         text("""
             SELECT ch.MaCauHoi, lch.ChoPhepNhieuDapAn
@@ -238,7 +227,6 @@ def check_practice_question(
     if not q_info["ChoPhepNhieuDapAn"] and len(unique_answer_ids) > 1:
         raise HTTPException(status_code=400, detail="Câu hỏi này chỉ được chọn 1 đáp án.")
 
-    # Chặn sửa lại đáp án của câu đã bấm Kiểm tra trước đó
     already_checked = db.execute(
         text("""
             SELECT TOP 1 1
@@ -251,7 +239,6 @@ def check_practice_question(
     if already_checked:
         raise HTTPException(status_code=409, detail="Câu hỏi này đã được kiểm tra đáp án trước đó.")
 
-    # Lưu lựa chọn vào ChiTietTraLoiLuotLam (FK ghép tự kiểm tra MaDapAn thuộc đúng MaCauHoi)
     try:
         for ans_id in unique_answer_ids:
             db.execute(
@@ -266,7 +253,6 @@ def check_practice_question(
         db.rollback()
         raise HTTPException(status_code=400, detail="Mã đáp án không hợp lệ hoặc không thuộc câu hỏi này.")
 
-    # Lấy danh sách đáp án đúng để chấm ngay câu này và trả về UI
     ans_rows = db.execute(
         text("""
             SELECT MaDapAn, NoiDung, LaDapAnDung, ThuTuHienThi
@@ -297,9 +283,6 @@ def check_practice_question(
     }
 
 
-# =========================================================================
-# 3. HOÀN THÀNH / NỘP BÀI ÔN TẬP (Tổng kết điểm & lưu lịch sử DaDat)
-# =========================================================================
 @router.post("/attempts/{ma_luot_lam}/finish")
 def finish_practice_attempt(
     ma_luot_lam: int,
@@ -328,7 +311,6 @@ def finish_practice_attempt(
     if attempt["TrangThai"] != "DANG_LAM":
         raise HTTPException(status_code=400, detail="Lượt ôn tập này đã được nộp trước đó.")
 
-    # Đối chiếu tất cả câu đã trả lời với đáp án đúng trong DB
     user_rows = db.execute(
         text("SELECT MaCauHoi, MaDapAn FROM ChiTietTraLoiLuotLam WHERE MaLuotLam = :ll_id"),
         {"ll_id": ma_luot_lam},
@@ -390,9 +372,6 @@ def finish_practice_attempt(
     }
 
 
-# =========================================================================
-# 4. HỦY LƯỢT ÔN TẬP ĐANG LÀM DỞ (Để bỏ không làm nữa hoặc làm lại từ đầu)
-# =========================================================================
 @router.delete("/attempts/{ma_luot_lam}")
 def cancel_practice_attempt(
     ma_luot_lam: int,

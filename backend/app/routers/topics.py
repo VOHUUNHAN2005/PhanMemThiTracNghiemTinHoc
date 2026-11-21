@@ -119,9 +119,9 @@ def _query_exams_by_topic_and_type(db: Session, me_id: int, ma_chu_de: int, loai
     }
 
 
-# =========================================================================
-# TAB TRANG CHỦ: ĐỀ THI CHÍNH THỨC (THI_CHINH_THUC - CÓ TÍNH GIỜ & CÚP)
-# =========================================================================
+
+
+
 @router.get("/home/topics")
 def get_home_topics(
     current_user: dict = Depends(get_current_user),
@@ -139,9 +139,9 @@ def get_home_exams_by_topic(
     return _query_exams_by_topic_and_type(db, current_user["MaNguoiDung"], ma_chu_de, "THI_CHINH_THUC")
 
 
-# =========================================================================
-# TAB ÔN TẬP: ĐỀ LUYỆN TẬP (LUYEN_TAP - KHÔNG TÍNH GIỜ)
-# =========================================================================
+
+
+
 @router.get("/practice/topics")
 def get_practice_topics(
     current_user: dict = Depends(get_current_user),

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas.friend import RespondFriendRequest, SendFriendRequest
+from app.services.arena_manager import arena_manager
 from security import get_current_user
 
 router = APIRouter(prefix="/api/friends", tags=["Friends"])
@@ -13,10 +14,6 @@ def _normalize_pair(user_a: int, user_b: int) -> tuple[int, int]:
     """Đảm bảo ràng buộc CK_KetBan_ChuanHoaCap: MaNguoiDung1 < MaNguoiDung2"""
     return (user_a, user_b) if user_a < user_b else (user_b, user_a)
 
-
-# =========================================================================
-# 1. TÌM KIẾM NGƯỜI CHƠI ĐỂ KẾT BẠN
-# =========================================================================
 @router.get("/search")
 def search_users(
     q: str = Query(..., min_length=1, max_length=100, description="Tên đăng nhập, họ tên hoặc email"),
@@ -79,10 +76,6 @@ def search_users(
 
     return results
 
-
-# =========================================================================
-# 2. DANH SÁCH BẠN BÈ
-# =========================================================================
 @router.get("/")
 def get_my_friends(
     current_user: dict = Depends(get_current_user),
@@ -135,9 +128,6 @@ def get_my_friends(
     ]
 
 
-# =========================================================================
-# 3. DANH SÁCH LỜI MỜI KẾT BẠN (ĐẾN & ĐÃ GỬI) + THÔNG BÁO KẾT BẠN
-# =========================================================================
 @router.get("/requests")
 def get_friend_requests(
     current_user: dict = Depends(get_current_user),
@@ -273,11 +263,8 @@ def mark_friend_notification_read(
     return {"message": "Đã đánh dấu đã đọc."}
 
 
-# =========================================================================
-# 4. GỬI LỜI MỜI KẾT BẠN
-# =========================================================================
 @router.post("/request", status_code=status.HTTP_201_CREATED)
-def send_friend_request(
+async def send_friend_request(
     payload: SendFriendRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -318,7 +305,6 @@ def send_friend_request(
                 detail="Người này đã gửi lời mời kết bạn cho bạn, hãy đồng ý lời mời.",
             )
 
-        # Từng bị TU_CHOI -> cập nhật lại bản ghi cũ thành CHO_DUYET
         db.execute(
             text("""
                 UPDATE KetBan
@@ -341,7 +327,8 @@ def send_friend_request(
             {"u1": u1, "u2": u2, "me": me_id},
         ).scalar()
 
-    # Tạo thông báo trong bảng ThongBao cho người nhận
+    noi_dung_tb = f"{current_user['HoTen']} (@{current_user['TenDangNhap']}) đã gửi lời mời kết bạn cho bạn."
+
     db.execute(
         text("""
             INSERT INTO ThongBao (MaNguoiNhan, LoaiThongBao, TieuDe, NoiDung, MaThamChieu)
@@ -355,11 +342,22 @@ def send_friend_request(
         """),
         {
             "nhan": target_id,
-            "noidung": f"{current_user['HoTen']} (@{current_user['TenDangNhap']}) đã gửi lời mời kết bạn cho bạn.",
+            "noidung": noi_dung_tb,
             "ref_id": ma_ket_ban,
         },
     )
     db.commit()
+
+    await arena_manager.send_personal(
+        target_id,
+        "NEW_NOTIFICATION",
+        {
+            "LoaiThongBao": "LOI_MOI_KET_BAN",
+            "TieuDe": "Lời mời kết bạn mới",
+            "NoiDung": noi_dung_tb,
+            "MaThamChieu": ma_ket_ban,
+        },
+    )
 
     return {
         "message": "Đã gửi lời mời kết bạn!",
@@ -367,11 +365,8 @@ def send_friend_request(
     }
 
 
-# =========================================================================
-# 5. ĐỒNG Ý HOẶC TỪ CHỐI LỜI MỜI KẾT BẠN
-# =========================================================================
 @router.post("/respond")
-def respond_friend_request(
+async def respond_friend_request(
     payload: RespondFriendRequest,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -410,7 +405,6 @@ def respond_friend_request(
         {"st": new_status, "id": payload.MaKetBan},
     )
 
-    # Đánh dấu đã đọc thông báo lời mời tương ứng
     db.execute(
         text("""
             UPDATE ThongBao
@@ -421,6 +415,8 @@ def respond_friend_request(
         """),
         {"me": me_id, "ref_id": payload.MaKetBan},
     )
+
+    noi_dung_tb = f"{current_user['HoTen']} đã đồng ý lời mời kết bạn của bạn."
 
     if payload.ChapNhan:
         db.execute(
@@ -436,12 +432,24 @@ def respond_friend_request(
             """),
             {
                 "gui": kb["MaNguoiGui"],
-                "noidung": f"{current_user['HoTen']} đã đồng ý lời mời kết bạn của bạn.",
+                "noidung": noi_dung_tb,
                 "ref_id": payload.MaKetBan,
             },
         )
 
     db.commit()
+
+    if payload.ChapNhan:
+        await arena_manager.send_personal(
+            kb["MaNguoiGui"],
+            "NEW_NOTIFICATION",
+            {
+                "LoaiThongBao": "HE_THONG",
+                "TieuDe": "Đã chấp nhận lời mời kết bạn",
+                "NoiDung": noi_dung_tb,
+                "MaThamChieu": payload.MaKetBan,
+            },
+        )
 
     return {
         "message": "Đã đồng ý kết bạn!" if payload.ChapNhan else "Đã từ chối lời mời kết bạn.",
@@ -449,9 +457,6 @@ def respond_friend_request(
     }
 
 
-# =========================================================================
-# 6. HỦY LỜI MỜI ĐÃ GỬI (Dành cho người gửi khi đang CHO_DUYET)
-# =========================================================================
 @router.delete("/request/{target_user_id}")
 def cancel_sent_friend_request(
     target_user_id: int,
@@ -476,7 +481,7 @@ def cancel_sent_friend_request(
     if kb["MaNguoiGui"] != me_id:
         raise HTTPException(status_code=403, detail="Bạn không phải người gửi lời mời này.")
 
-    # Xóa thông báo chưa xử lý bên người nhận & xóa bản ghi KetBan
+
     db.execute(
         text("""
             DELETE FROM ThongBao
@@ -492,9 +497,6 @@ def cancel_sent_friend_request(
     return {"message": "Đã hủy lời mời kết bạn."}
 
 
-# =========================================================================
-# 7. XÓA / HỦY KẾT BẠN (Khi đã là DA_KET_BAN)
-# =========================================================================
 @router.delete("/{friend_user_id}")
 def unfriend_user(
     friend_user_id: int,
@@ -522,9 +524,6 @@ def unfriend_user(
     return {"message": "Đã hủy kết bạn."}
 
 
-# =========================================================================
-# 8. XEM HỒ SƠ CỦA BẠN BÈ (HOẶC NGƯỜI CHƠI KHÁC)
-# =========================================================================
 @router.get("/profile/{target_user_id}")
 def get_friend_profile(
     target_user_id: int,
@@ -534,7 +533,6 @@ def get_friend_profile(
     me_id = current_user["MaNguoiDung"]
     u1, u2 = _normalize_pair(me_id, target_user_id)
 
-    # 1. Lấy thông tin cơ bản + hạng
     user_row = db.execute(
         text("""
             SELECT
@@ -560,7 +558,6 @@ def get_friend_profile(
     if not user_row:
         raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ người dùng.")
 
-    # 2. Kiểm tra trạng thái quan hệ bạn bè với mình
     kb = db.execute(
         text("""
             SELECT MaKetBan, MaNguoiGui, TrangThai, NgayCapNhat
@@ -579,7 +576,6 @@ def get_friend_profile(
         elif kb["TrangThai"] == "CHO_DUYET":
             quan_he = "DA_GUI_LOI_MOI" if kb["MaNguoiGui"] == me_id else "CHO_MINH_DUYET"
 
-    # 3. Thống kê thành tích thi đấu & luyện tập của người đó
     stats_arena = db.execute(
         text("""
             SELECT
@@ -604,7 +600,6 @@ def get_friend_profile(
         {"target": target_user_id},
     ).mappings().first()
 
-    # 4. Top 5 biến động cúp gần nhất (nếu đã là bạn bè thì cho xem chi tiết)
     cup_history = []
     if quan_he in ("BAN_BE", "CHINH_MINH"):
         history_rows = db.execute(

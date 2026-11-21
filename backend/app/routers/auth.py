@@ -108,13 +108,13 @@ def register_user(
         db.execute(
             text("""
                 INSERT INTO NguoiDung (
-                    FirebaseUid, TenDangNhap, Email, MatKhauHash, HoTen, 
-                    AnhDaiDien, VaiTro, SoCupHienTai, MaHangHienTai, 
+                    FirebaseUid, TenDangNhap, Email, MatKhauHash, HoTen,
+                    AnhDaiDien, VaiTro, SoCupHienTai, MaHangHienTai,
                     TrangThaiOnline, HoatDongCuoi, TrangThaiTaiKhoan
                 )
                 VALUES (
-                    :uid, :username, :email, 'FIREBASE_AUTH', :hoten, 
-                    :avatar, 'THI_SINH', 0, :mahang, 
+                    :uid, :username, :email, 'FIREBASE_AUTH', :hoten,
+                    :avatar, 'THI_SINH', 0, :mahang,
                     0, SYSUTCDATETIME(), 'HOAT_DONG'
                 )
             """),

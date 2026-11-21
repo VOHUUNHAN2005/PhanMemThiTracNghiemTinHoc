@@ -50,13 +50,31 @@ def get_current_user(
                 detail="Tài khoản Firebase thiếu thông tin Email.",
             )
 
+        ma_hang_mac_dinh = db.execute(
+            text("SELECT TOP 1 MaHang FROM CapBacHang ORDER BY ThuTuHang ASC")
+        ).scalar()
+
+        if not ma_hang_mac_dinh:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Hệ thống chưa cấu hình danh mục bậc hạng (CapBacHang).",
+            )
+
         base_username = email.split("@")[0][:40]
         unique_username = f"{base_username}_{uuid.uuid4().hex[:4]}"
 
         db.execute(
             text("""
-                INSERT INTO NguoiDung (FirebaseUid, TenDangNhap, Email, HoTen, AnhDaiDien, TrangThaiOnline, HoatDongCuoi)
-                VALUES (:uid, :username, :email, :hoten, :avatar, 1, SYSUTCDATETIME())
+                INSERT INTO NguoiDung (
+                    FirebaseUid, TenDangNhap, Email, MatKhauHash, HoTen,
+                    AnhDaiDien, VaiTro, SoCupHienTai, MaHangHienTai,
+                    TrangThaiOnline, HoatDongCuoi, TrangThaiTaiKhoan
+                )
+                VALUES (
+                    :uid, :username, :email, 'FIREBASE_AUTH', :hoten,
+                    :avatar, 'THI_SINH', 0, :mahang,
+                    1, SYSUTCDATETIME(), 'HOAT_DONG'
+                )
             """),
             {
                 "uid": firebase_uid,
@@ -64,6 +82,7 @@ def get_current_user(
                 "email": email,
                 "hoten": name,
                 "avatar": picture,
+                "mahang": ma_hang_mac_dinh,
             },
         )
         db.commit()

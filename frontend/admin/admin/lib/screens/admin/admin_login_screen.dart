@@ -1,7 +1,7 @@
-import 'dart:convert';
+import 'package:admin/services/admin_api_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import '../../services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'admin_dashboard_screen.dart';
 
 class AdminLoginScreen extends StatefulWidget {
@@ -12,15 +12,17 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  final _emailController = TextEditingController(
+    text: kDebugMode ? 'admin@itquiz.vn' : '',
+  );
+  final _passwordController = TextEditingController(
+    text: kDebugMode ? 'admin123' : '',
+  );
+  final _api = AdminApiService();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
-
-  static const String _baseUrl = 'http://127.0.0.1:8000';
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -28,59 +30,59 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-  void _login(){
-    Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AdminDashboardScreen(),
-        ),
-      );
-  }
-  Future<void> _handleAdminLogin() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
+
+  Future<void> _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Vui lòng nhập đầy đủ Email và Mật khẩu.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
     try {
-      final credential = await _authService.signIn(
-        email: _emailController.text,
-        password: _passwordController.text,
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
 
-      final token = await credential?.user?.getIdToken();
-      if (token == null) throw 'Không lấy được token xác thực.';
+      final profile = await _api.getMyProfile();
 
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/users/me'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-      );
-
-      if (response.statusCode != 200) {
-        await _authService.signOut();
-        throw 'Lỗi kết nối máy chủ (${response.statusCode}).';
-      }
-
-      final userData = jsonDecode(utf8.decode(response.bodyBytes));
-
-      if (userData['VaiTro'] != 'ADMIN') {
-        await _authService.signOut();
-        throw 'Tài khoản này không có quyền Quản trị viên (Admin).';
+      if (profile['VaiTro'] != 'ADMIN') {
+        await FirebaseAuth.instance.signOut();
+        setState(() {
+          _errorMessage = 'Từ chối truy cập! Tài khoản này không có quyền Quản trị viên.';
+        });
+        return;
       }
 
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => AdminDashboardScreen(adminProfile: userData),
+          builder: (_) => AdminDashboardScreen(adminProfile: Map<String, dynamic>.from(profile)),
         ),
       );
+    } on FirebaseAuthException catch (e) {
+      String msg = 'Đăng nhập thất bại.';
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+        msg = 'Email hoặc mật khẩu không chính xác.';
+      } else if (e.code == 'wrong-password') {
+        msg = 'Mật khẩu không chính xác.';
+      } else if (e.code == 'invalid-email') {
+        msg = 'Định dạng Email không hợp lệ.';
+      } else if (e.code == 'too-many-requests') {
+        msg = 'Thử lại quá nhiều lần. Vui lòng đợi ít phút.';
+      }
+      setState(() => _errorMessage = msg);
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
-      );
+      await FirebaseAuth.instance.signOut();
+      setState(() => _errorMessage = e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -93,84 +95,120 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       body: Center(
         child: Container(
           width: 420,
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(36),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
+                color: Color(0x14000000),
+                blurRadius: 24,
+                offset: Offset(0, 8),
               ),
             ],
           ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Icon(Icons.admin_panel_settings, size: 56, color: Colors.indigo),
-                const SizedBox(height: 12),
-                const Text(
-                  'IT QUIZ ADMIN PORTAL',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Đăng nhập bằng tài khoản Quản trị viên',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 28),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email quản trị',
-                    prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/logo_app.png',
+                    width: 100,
+                    height: 100,
+                    fit: BoxFit.cover,
                   ),
-                  validator: (v) =>
-                      (v == null || !v.contains('@')) ? 'Email không hợp lệ' : null,
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Mật khẩu',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'QUẢN TRỊ HỆ THỐNG',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Hệ thống Ôn tập & Thi Trắc nghiệm Tin học',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 28),
+              if (_errorMessage != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFECACA)),
                   ),
-                  validator: (v) =>
-                      (v == null || v.length < 6) ? 'Mật khẩu tối thiểu 6 ký tự' : null,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Color(0xFFDC2626), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Color(0xFFDC2626), fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  //onPressed: _isLoading ? null : _handleAdminLogin,
-                  onPressed: _login,
+              TextField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                onSubmitted: (_) => _handleLogin(),
+                decoration: InputDecoration(
+                  labelText: 'Email Quản trị viên',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                onSubmitted: (_) => _handleLogin(),
+                decoration: InputDecoration(
+                  labelText: 'Mật khẩu',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _handleLogin,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: _isLoading
                       ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                         )
-                      : const Text('Đăng nhập hệ thống', style: TextStyle(fontSize: 16)),
+                      : const Text(
+                          'ĐĂNG NHẬP',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

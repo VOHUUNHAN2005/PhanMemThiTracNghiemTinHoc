@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -10,8 +11,12 @@ from security import get_current_user
 
 router = APIRouter(prefix="/api/official", tags=["Official Exam"])
 
-CUP_THUONG_THI_DAT = 10  # Số cúp thưởng khi đạt đề thi chính thức lần đầu
-NETWORK_GRACE_SECONDS = 5  # Du di 5 giây độ trễ mạng khi nộp bài
+CUP_THUONG_THI_DAT = 100
+NETWORK_GRACE_SECONDS = 5
+
+
+class CheatReportRequest(BaseModel):
+    LyDo: str = Field("Gian lận trong phòng thi", max_length=30)
 
 
 def _parse_utc(dt_val) -> datetime:
@@ -23,12 +28,10 @@ def _parse_utc(dt_val) -> datetime:
 
 
 def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | None = None) -> dict:
-    """Chấm điểm, cập nhật trạng thái lượt thi và cộng cúp nếu đạt"""
     ma_luot_lam = attempt["MaLuotLam"]
     me_id = attempt["MaNguoiDung"]
     ma_bo_de = attempt["MaBoDe"]
 
-    # 1. Xác định trạng thái kết thúc (DA_NOP hoặc HET_GIO)
     now_utc = datetime.now(timezone.utc)
     start_utc = _parse_utc(attempt["ThoiGianBatDau"])
     limit_minutes = attempt["ThoiGianLamBai"] or 0
@@ -41,7 +44,6 @@ def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | 
     else:
         final_status = "DA_NOP"
 
-    # 2. Lấy đáp án user đã chọn & đáp án đúng của đề
     user_rows = db.execute(
         text("SELECT MaCauHoi, MaDapAn FROM ChiTietTraLoiLuotLam WHERE MaLuotLam = :ll_id"),
         {"ll_id": ma_luot_lam},
@@ -74,7 +76,6 @@ def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | 
     diem_so = round((so_cau_dung / tong_so_cau) * 10, 2) if tong_so_cau > 0 else 0.0
     da_dat = 1 if diem_so >= float(attempt["DiemDatToiThieu"]) else 0
 
-    # 3. Nếu đạt, kiểm tra xem đã từng nhận cúp cho bộ đề này chưa
     cup_nhan_duoc = 0
     if da_dat == 1:
         already_rewarded = db.execute(
@@ -88,12 +89,52 @@ def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | 
 
         if not already_rewarded:
             cup_nhan_duoc = CUP_THUONG_THI_DAT
+            cup_truoc = db.execute(
+                text("SELECT ISNULL(SoCupHienTai, 0) FROM NguoiDung WHERE MaNguoiDung = :me"),
+                {"me": me_id},
+            ).scalar() or 0
+            cup_sau = cup_truoc + cup_nhan_duoc
+
+            new_rank_id = db.execute(
+                text("""
+                    SELECT TOP 1 MaHang
+                    FROM CapBacHang
+                    WHERE CupToiThieu <= :cup_sau
+                    ORDER BY CupToiThieu DESC, ThuTuHang DESC
+                """),
+                {"cup_sau": cup_sau},
+            ).scalar()
+
             db.execute(
-                text("UPDATE NguoiDung SET TongCup = ISNULL(TongCup, 0) + :cup WHERE MaNguoiDung = :me"),
-                {"cup": cup_nhan_duoc, "me": me_id},
+                text("""
+                    UPDATE NguoiDung
+                    SET SoCupHienTai = :cup_sau,
+                        MaHangHienTai = COALESCE(:ma_hang, MaHangHienTai)
+                    WHERE MaNguoiDung = :me
+                """),
+                {"cup_sau": cup_sau, "ma_hang": new_rank_id, "me": me_id},
+            )
+            db.execute(
+                text("""
+                    INSERT INTO LichSuBienDongCup (
+                        MaNguoiDung, LoaiBienDong, MaThamChieu,
+                        SoCupThayDoi, SoCupTruoc, SoCupSau, MoTa, NgayTao
+                    )
+                    VALUES (
+                        :me, 'THI_CHINH_THUC_DAT', :ll_id,
+                        :cup, :truoc, :sau, :mota, SYSUTCDATETIME()
+                    )
+                """),
+                {
+                    "me": me_id,
+                    "ll_id": ma_luot_lam,
+                    "cup": cup_nhan_duoc,
+                    "truoc": cup_truoc,
+                    "sau": cup_sau,
+                    "mota": f"Đạt bài thi chính thức (Mã bộ đề #{ma_bo_de})",
+                },
             )
 
-    # 4. Chốt lượt làm bài (KHÔNG trả về chi tiết đáp án đúng/sai từng câu)
     db.execute(
         text("""
             UPDATE LuotLamBai
@@ -126,16 +167,17 @@ def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | 
         "DaDat": bool(da_dat),
         "CupNhanDuoc": cup_nhan_duoc,
         "ThongBao": (
-            "Chúc mừng bạn đã ĐẠT bài thi chính thức!"
-            if da_dat == 1
-            else ("Đã hết thời gian làm bài và hệ thống tự động nộp bài." if final_status == "HET_GIO" else "Bạn chưa đạt điểm tối thiểu. Hãy ôn tập thêm và thử lại!")
+            f"Chúc mừng bạn đã ĐẠT bài thi chính thức (+{cup_nhan_duoc} cúp)!"
+            if da_dat == 1 and cup_nhan_duoc > 0
+            else (
+                "Chúc mừng bạn đã ĐẠT bài thi chính thức!"
+                if da_dat == 1
+                else ("Đã hết thời gian làm bài và hệ thống tự động nộp bài." if final_status == "HET_GIO" else "Bạn chưa đạt điểm tối thiểu. Hãy ôn tập thêm và thử lại!")
+            )
         ),
     }
 
 
-# =========================================================================
-# 1. BẮT ĐẦU THI CHÍNH THỨC (Chặn nếu đã đạt, hủy lượt dở cũ nếu thoát ngang)
-# =========================================================================
 @router.post("/exams/{ma_bo_de}/start")
 def start_official_exam(
     ma_bo_de: int,
@@ -162,7 +204,6 @@ def start_official_exam(
     if not bo_de["ThoiGianLamBai"] or bo_de["ThoiGianLamBai"] <= 0:
         raise HTTPException(status_code=400, detail="Đề thi chính thức chưa được cấu hình thời gian làm bài.")
 
-    # Quy tắc 1: Đã đạt rồi thì KHÔNG được làm lại nữa
     passed_before = db.execute(
         text("""
             SELECT TOP 1 1
@@ -178,7 +219,6 @@ def start_official_exam(
             detail="Bạn đã vượt qua đề thi chính thức này rồi, không thể thi lại nữa.",
         )
 
-    # Quy tắc 2: Không cho kết nối lại -> Nếu đang có lượt DANG_LAM dở thì hủy thành HUY_GIAN_LAN
     stale_attempts = db.execute(
         text("""
             SELECT MaLuotLam
@@ -204,7 +244,6 @@ def start_official_exam(
             )
         db.commit()
 
-    # Kiểm tra câu hỏi của đề
     q_rows = db.execute(
         text("""
             SELECT
@@ -243,7 +282,6 @@ def start_official_exam(
                 "ChoPhepNhieuDapAn": bool(r["ChoPhepNhieuDapAn"]),
                 "DapAn": [],
             }
-        # Tuyệt đối KHÔNG trả về LaDapAnDung
         questions_dict[q_id]["DapAn"].append({
             "MaDapAn": r["MaDapAn"],
             "NoiDung": r["NoiDungDapAn"],
@@ -253,7 +291,6 @@ def start_official_exam(
     questions_list = list(questions_dict.values())
     tong_so_cau = len(questions_list)
 
-    # Tạo lượt thi chính thức mới
     inserted = db.execute(
         text("""
             INSERT INTO LuotLamBai (MaNguoiDung, MaBoDe, MaThietBiLamBai, TrangThai, TongSoCau)
@@ -286,9 +323,6 @@ def start_official_exam(
     }
 
 
-# =========================================================================
-# 2. LƯU ĐÁP ÁN TỪNG CÂU TRONG LÚC THI (Không trả về đúng/sai)
-# =========================================================================
 @router.post("/attempts/{ma_luot_lam}/answer")
 def save_official_answer(
     ma_luot_lam: int,
@@ -318,7 +352,6 @@ def save_official_answer(
     if attempt["TrangThai"] != "DANG_LAM":
         raise HTTPException(status_code=400, detail="Lượt thi đã kết thúc hoặc bị hủy.")
 
-    # Kiểm tra quá giờ chưa
     start_utc = _parse_utc(attempt["ThoiGianBatDau"])
     deadline_utc = start_utc + timedelta(minutes=attempt["ThoiGianLamBai"], seconds=NETWORK_GRACE_SECONDS)
     if datetime.now(timezone.utc) > deadline_utc:
@@ -363,9 +396,6 @@ def save_official_answer(
     return {"saved": True, "MaCauHoi": payload.MaCauHoi, "MaDapAnDaChon": unique_ans}
 
 
-# =========================================================================
-# 3. NỘP BÀI THI CHÍNH THỨC (Chấm điểm tổng, không lộ đáp án từng câu)
-# =========================================================================
 @router.post("/attempts/{ma_luot_lam}/submit")
 def submit_official_exam(
     ma_luot_lam: int,
@@ -398,9 +428,6 @@ def submit_official_exam(
     return _grade_and_finalize_attempt(db=db, attempt=dict(attempt))
 
 
-# =========================================================================
-# 4. HỦY BÀI DO THOÁT GIỮA CHỪNG (Thoát đồng nghĩa với hủy bài)
-# =========================================================================
 @router.post("/attempts/{ma_luot_lam}/abort")
 def abort_official_exam(
     ma_luot_lam: int,
@@ -422,9 +449,6 @@ def abort_official_exam(
     if not attempt or attempt["MaNguoiDung"] != me_id:
         raise HTTPException(status_code=404, detail="Không tìm thấy lượt thi.")
 
-    if attempt["LoaiBoDe"] != "THI_CHINH_THUC":
-        raise HTTPException(status_code=400, detail="API này chỉ dành cho đề thi chính thức.")
-
     if attempt["TrangThai"] == "DANG_LAM":
         db.execute(
             text("""
@@ -441,3 +465,45 @@ def abort_official_exam(
         db.commit()
 
     return {"message": "Lượt thi đã bị hủy do rời khỏi phòng thi.", "TrangThai": "HUY_GIAN_LAN"}
+
+
+@router.post("/attempts/{ma_luot_lam}/cheat")
+def report_official_exam_cheat(
+    ma_luot_lam: int,
+    payload: CheatReportRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Phát hiện gian lận khi thi chính thức -> Hủy bài & Khóa vĩnh viễn tài khoản"""
+    me_id = current_user["MaNguoiDung"]
+    ly_do = (payload.LyDo or "Gian lận trong phòng thi").strip()[:30]
+
+    db.execute(
+        text("""
+            UPDATE LuotLamBai
+            SET TrangThai = 'HUY_GIAN_LAN',
+                ThoiGianNopBai = SYSUTCDATETIME(),
+                SoCauDung = 0,
+                DiemSo = 0,
+                DaDat = 0
+            WHERE MaLuotLam = :ll_id AND MaNguoiDung = :me AND TrangThai = 'DANG_LAM'
+        """),
+        {"ll_id": ma_luot_lam, "me": me_id},
+    )
+
+    db.execute(
+        text("""
+            UPDATE NguoiDung
+            SET TrangThaiTaiKhoan = 'BI_KHOA',
+                LyDoKhoa = :ly_do,
+                TrangThaiOnline = 0
+            WHERE MaNguoiDung = :me
+        """),
+        {"ly_do": ly_do, "me": me_id},
+    )
+    db.commit()
+
+    return {
+        "message": "Phát hiện hành vi gian lận. Bài thi đã bị hủy và tài khoản của bạn đã bị khóa.",
+        "TrangThaiTaiKhoan": "BI_KHOA",
+    }
