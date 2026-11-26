@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:user/core/constants/api_client.dart';
 import 'package:user/core/constants/api_constants.dart';
+import 'package:user/core/models/cup_history_model.dart';
 
 import '../models/user_model.dart';
 
+typedef JsonMap = Map<String, dynamic>;
+
 class UserService {
-  /// Lấy hồ sơ mới nhất của người dùng hiện tại
   Future<UserModel> getProfile() async {
     final res = await ApiClient.get(ApiConstants.getMe);
     if (res.statusCode != 200) {
@@ -16,7 +18,6 @@ class UserService {
     return UserModel.fromJson(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 
-  /// Cập nhật Họ tên & Tên đăng nhập
   Future<void> updateProfile({
     required String hoTen,
     required String tenDangNhap,
@@ -34,7 +35,6 @@ class UserService {
     }
   }
 
-  /// Tải ảnh đại diện mới lên server
   Future<String> uploadAvatar({
     required Uint8List bytes,
     required String filename,
@@ -50,5 +50,27 @@ class UserService {
     }
     final data = jsonDecode(utf8.decode(res.bodyBytes));
     return data['AnhDaiDien'];
+  }
+
+  Future<List<CupHistoryModel>> getCupHistory() async {
+    final res = await ApiClient.get(ApiConstants.userHistory);
+    if (res.statusCode != 200) {
+      final err = jsonDecode(utf8.decode(res.bodyBytes));
+      throw err['detail'] ?? 'Không thể tải lịch sử biến động cúp.';
+    }
+    final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+    final List rawList = decoded['cup_history'] ?? [];
+    return rawList
+        .map((e) => CupHistoryModel.fromJson(JsonMap.from(e)))
+        .toList();
+  }
+
+  Future<JsonMap> getLeaderboard() async {
+    final res = await ApiClient.get(ApiConstants.leaderboard);
+    if (res.statusCode != 200) {
+      final err = jsonDecode(utf8.decode(res.bodyBytes));
+      throw err['detail'] ?? 'Không thể tải bảng xếp hạng.';
+    }
+    return JsonMap.from(jsonDecode(utf8.decode(res.bodyBytes)));
   }
 }

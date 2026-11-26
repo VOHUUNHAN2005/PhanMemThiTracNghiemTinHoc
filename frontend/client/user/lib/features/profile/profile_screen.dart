@@ -1,21 +1,28 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:user/core/constants/api_client.dart';
-import 'package:user/core/constants/api_constants.dart';
 import 'package:user/core/constants/app_colors.dart';
+import 'package:user/core/models/cup_history_model.dart';
 import 'package:user/core/models/user_model.dart';
 import 'package:user/core/services/auth_service.dart';
 import 'package:user/core/services/user_service.dart';
 import 'package:user/core/shared/widgets/bottom_menu.dart';
 import 'package:user/features/auth/login_screen.dart';
+
 class ProfileScreen extends StatefulWidget {
   final UserModel? initialProfile;
+  final bool embeddedInHome;
+  final void Function(UserModel updatedProfile)? onProfileUpdated;
 
-  const ProfileScreen({super.key, this.initialProfile});
+  const ProfileScreen({
+    super.key,
+    this.initialProfile,
+    this.embeddedInHome = false,
+    this.onProfileUpdated,
+  });
 
   @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
+  State createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
@@ -26,7 +33,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int selectedIndex = 4;
   String step = 'hoso';
   bool _isLoading = false;
+  bool _isLoadingHistory = true;
   UserModel? _profile;
+  List _cupHistory = [];
 
   XFile? _pickedImageFile;
   Uint8List? _pickedImageBytes;
@@ -44,6 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     hoTenCtrl = TextEditingController(text: _profile?.hoTen ?? '');
     usernameCtrl = TextEditingController(text: _profile?.tenDangNhap ?? '');
     _fetchProfile();
+    _fetchCupHistory();
   }
 
   @override
@@ -75,8 +85,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
           hoTenCtrl.text = data.hoTen;
           usernameCtrl.text = data.tenDangNhap;
         });
+        widget.onProfileUpdated?.call(data);
       }
     } catch (_) {}
+  }
+
+  Future<void> _fetchCupHistory() async {
+    if (mounted) setState(() => _isLoadingHistory = true);
+    try {
+      final list = await _userService.getCupHistory();
+      if (mounted) {
+        setState(() => _cupHistory = list);
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _isLoadingHistory = false);
+    }
   }
 
   Future<void> _pickAvatarImage() async {
@@ -176,6 +200,170 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  void _showCupRulesBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.emoji_events, color: Colors.amber, size: 26),
+                SizedBox(width: 8),
+                Text(
+                  'Quy tắc cộng / trừ cúp',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.darkText),
+                ),
+              ],
+            ),
+            const Divider(height: 20),
+            _buildRuleRow('Đề thi chính thức (Đạt lần đầu)', '+100 Cúp', true),
+            _buildRuleRow('Đấu 1vs1 - Thắng trận', '+50 Cúp', true),
+            _buildRuleRow('Đấu 1vs1 - Thua trận', '-25 Cúp', false),
+            _buildRuleRow('Đấu 1vs1 / Giải đấu - Bỏ cuộc', '-30 Cúp', false),
+            _buildRuleRow('Giải đấu nhiều người - Top 1', '+100 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Top 2', '+70 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Top 3', '+50 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Hạng 4+', '+25 Cúp', true),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRuleRow(String label, String value, bool isPositive) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14, color: AppColors.subText))),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: isPositive ? const Color(0xFF176B38) : const Color(0xFFAA2020),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openLeaderboardModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.92,
+        expand: false,
+        builder: (_, scrollController) => FutureBuilder(
+          future: _userService.getLeaderboard(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Lỗi tải bảng xếp hạng: ${snapshot.error}'));
+            }
+            final Map data = (snapshot.data as Map?) ?? {};
+            final int myRank = data['HangCuaToi'] ?? 0;
+            final int myCups = data['SoCupCuaToi'] ?? 0;
+            final String myTier = data['TenHangCuaToi'] ?? '';
+            final List topPlayers = data['TopNguoiChoi'] ?? [];
+
+            return Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+                ),
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Bảng xếp hạng',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.darkText),
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.rankBg,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Hạng hiện tại của bạn: #$myRank',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkText)),
+                          Text('Bậc rank: $myTier', style: const TextStyle(color: AppColors.subText, fontSize: 13)),
+                        ],
+                      ),
+                      Text(
+                        '$myCups Cúp',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.rankText),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: topPlayers.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, index) {
+                      final p = topPlayers[index];
+                      final int rank = p['Hang'] ?? (index + 1);
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        leading: CircleAvatar(
+                          backgroundColor: rank == 1
+                              ? Colors.amber
+                              : (rank == 2 ? Colors.grey.shade400 : (rank == 3 ? Colors.brown.shade300 : AppColors.rankBg)),
+                          child: Text(
+                            '$rank',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.darkText),
+                          ),
+                        ),
+                        title: Text(p['HoTen'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('@${p['TenDangNhap'] ?? ''} • ${p['TenHang'] ?? ''}'),
+                        trailing: Text(
+                          '${p['SoCupHienTai'] ?? 0} Cúp',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryBlue),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   String _getInitials(String fullName) {
     final parts = fullName.trim().split(RegExp(r'\s+'));
     if (parts.isEmpty || parts.first.isEmpty) return 'US';
@@ -188,6 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final hoTen = _profile?.hoTen ?? 'Đang tải...';
+    final tenDangNhap = _profile?.tenDangNhap ?? '';
     final tenHang = _profile?.tenHang ?? 'Đồng';
     final soCup = _profile?.soCupHienTai ?? 0;
     final avatarUrl = _profile?.anhDaiDien;
@@ -195,26 +384,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: AppColors.scaffoldBg,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _buildBodyByStep(hoTen, tenHang, soCup, avatarUrl),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await Future.wait([_fetchProfile(), _fetchCupHistory()]);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _buildBodyByStep(hoTen, tenDangNhap, tenHang, soCup, avatarUrl),
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: BottomMenu(
-        selectedIndex: selectedIndex,
-        onTap: (index) {
-          setState(() {
-            selectedIndex = index;
-            if (index == 4) step = 'hoso';
-          });
-        },
-      ),
+      bottomNavigationBar: widget.embeddedInHome
+          ? null
+          : BottomMenu(
+              selectedIndex: selectedIndex,
+              onTap: (index) {
+                setState(() {
+                  selectedIndex = index;
+                  if (index == 4) step = 'hoso';
+                });
+              },
+            ),
     );
   }
 
-  Widget _buildBodyByStep(String hoTen, String tenHang, int soCup, String? avatarUrl) {
+  Widget _buildBodyByStep(
+      String hoTen, String tenDangNhap, String tenHang, int soCup, String? avatarUrl) {
     if (step == 'sua') {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -307,7 +505,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Text('Lưu thay đổi', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -345,15 +546,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 const Text('Mật khẩu hiện tại', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                TextField(controller: oldPassCtrl, obscureText: true, decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
+                TextField(
+                    controller: oldPassCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 const Text('Mật khẩu mới (tối thiểu 6 ký tự)', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                TextField(controller: newPassCtrl, obscureText: true, decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
+                TextField(
+                    controller: newPassCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
                 const SizedBox(height: 12),
                 const Text('Xác nhận mật khẩu mới', style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                TextField(controller: confirmPassCtrl, obscureText: true, decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
+                TextField(
+                    controller: confirmPassCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(hintText: '••••••••', border: OutlineInputBorder())),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
@@ -366,7 +576,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
                     child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Text('Cập nhật mật khẩu', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -387,7 +600,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           hoTen,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.darkText),
         ),
-        const SizedBox(height: 6),
+        if (tenDangNhap.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            '@$tenDangNhap',
+            style: const TextStyle(fontSize: 14, color: AppColors.subText, fontWeight: FontWeight.w500),
+          ),
+        ],
+        const SizedBox(height: 8),
         RankWidget(tenHang: tenHang, soCup: soCup),
         const SizedBox(height: 14),
         Row(
@@ -413,8 +633,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _openLeaderboardModal,
+                icon: const Icon(Icons.leaderboard, size: 18, color: AppColors.primaryBlue),
+                label: const Text('Bảng xếp hạng',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryBlue)),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: AppColors.primaryBlue),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _showCupRulesBottomSheet,
+                icon: const Icon(Icons.info_outline, size: 18, color: AppColors.primaryBlue),
+                label: const Text('Luật +/- cúp',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryBlue)),
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  side: const BorderSide(color: AppColors.primaryBlue),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 14),
-        const CupHistoryCard(),
+        CupHistoryCard(
+          historyList: _cupHistory,
+          isLoading: _isLoadingHistory,
+          onViewRules: _showCupRulesBottomSheet,
+        ),
         const SizedBox(height: 14),
         OutlinedButton(
           onPressed: _isLoading ? null : _handleLogout,
@@ -424,7 +680,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           ),
           child: _isLoading
-              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: AppColors.primaryBlue, strokeWidth: 2))
+              ? const SizedBox(
+                  height: 20, width: 20, child: CircularProgressIndicator(color: AppColors.primaryBlue, strokeWidth: 2))
               : const Text(
                   'Đăng xuất',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.primaryBlue),
@@ -435,10 +692,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
-
-// =========================================================================
-// WIDGET CON NỘI BỘ CỦA PROFILE SCREEN
-// =========================================================================
 
 class AvatarWidget extends StatelessWidget {
   final String initials;
@@ -529,7 +782,16 @@ class ActionButton extends StatelessWidget {
 }
 
 class CupHistoryCard extends StatelessWidget {
-  const CupHistoryCard({super.key});
+  final List historyList;
+  final bool isLoading;
+  final VoidCallback onViewRules;
+
+  const CupHistoryCard({
+    super.key,
+    required this.historyList,
+    required this.isLoading,
+    required this.onViewRules,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -540,22 +802,60 @@ class CupHistoryCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(color: Colors.blue.withOpacity(0.07), blurRadius: 15, offset: const Offset(0, 5)),
+          BoxShadow(color: Colors.blue.withValues(alpha: 0.07), blurRadius: 15, offset: const Offset(0, 5)),
         ],
       ),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Lịch sử biến động cúp',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.darkText),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Lịch sử biến động cúp',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.darkText),
+              ),
+              GestureDetector(
+                onTap: onViewRules,
+                child: const Text(
+                  'Quy tắc',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryBlue,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
           ),
-          SizedBox(height: 10),
-          CupHistoryItem(title: 'Thi chính thức đạt', value: '+100', isPositive: true),
-          CupHistoryItem(title: 'Thắng 1vs1', value: '+20', isPositive: true),
-          CupHistoryItem(title: 'Top 2 giải đấu', value: '+50', isPositive: true),
-          CupHistoryItem(title: 'Thua 1vs1', value: '+5', isPositive: true),
-          CupHistoryItem(title: 'Bị hủy kết quả thi', value: '-1000', isPositive: false),
+          const SizedBox(height: 10),
+          if (isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (historyList.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'Chưa có lịch sử biến động cúp nào.',
+                  style: TextStyle(color: AppColors.subText, fontSize: 14),
+                ),
+              ),
+            )
+          else
+            ...historyList.map(
+              (item) {
+                final CupHistoryModel history = item as CupHistoryModel;
+                return CupHistoryItem(
+                  title: history.displayTitle,
+                  value: history.formattedValue,
+                  isPositive: history.isPositive,
+                );
+              },
+            ),
         ],
       ),
     );

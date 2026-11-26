@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:user/core/models/user_model.dart';
 import 'package:user/core/services/auth_service.dart';
-import 'package:user/core/services/user_service.dart';
 import 'package:user/features/auth/forgot_password_screen.dart';
-import 'package:user/features/profile/profile_screen.dart';
+import 'package:user/features/home/home_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
@@ -27,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future _handleLogin() async {
     final email = emailCtrl.text.trim();
     final password = passCtrl.text;
 
@@ -50,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => ProfileScreen(initialProfile: userProfile),
+          builder: (_) => const HomeScreen(),
         ),
       );
     } on FirebaseAuthException catch (e) {
