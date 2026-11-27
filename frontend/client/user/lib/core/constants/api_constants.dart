@@ -1,6 +1,6 @@
 class ApiConstants {
   static const bool useNgrok = false;
-  static const String _lanHost = '192.168.40.102';
+  static const String _lanHost = '192.168.20.63';
   static const int _lanPort = 8000;
   static const String _ngrokHost = 'your-ngrok-domain.ngrok-free.app';
 
