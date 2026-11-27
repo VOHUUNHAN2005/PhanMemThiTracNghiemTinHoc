@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -105,7 +105,7 @@ class ArenaService {
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
-      'ngrok-skip-browser-warning': 'true'
+      'ngrok-skip-browser-warning': 'true',
     };
   }
 
@@ -124,8 +124,11 @@ class ArenaService {
         if (detail is List && detail.isNotEmpty) {
           final first = detail.first;
           if (first is Map && first['msg'] != null) {
-            final loc = (first['loc'] is List) ? (first['loc'] as List).join('.') : '';
-            return loc.isNotEmpty ? '$loc: ${first['msg']}' : first['msg'].toString();
+            final loc =
+                (first['loc'] is List) ? (first['loc'] as List).join('.') : '';
+            return loc.isNotEmpty
+                ? '$loc: ${first['msg']}'
+                : first['msg'].toString();
           }
           return detail.first.toString();
         }
@@ -238,10 +241,7 @@ class ArenaService {
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
         if (decoded is List) {
-          return decoded
-              .whereType()
-              .map((e) => JsonMap.from(e))
-              .toList();
+          return decoded.whereType().map((e) => JsonMap.from(e)).toList();
         }
       }
     } catch (_) {}
@@ -301,6 +301,27 @@ class ArenaService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(_extractError(response, 'Không thể đuổi người chơi.'));
     }
+  }
+
+  static Future<JsonMap> getMatchReview(int maPhong) async {
+    final headers = await _getHeaders();
+    final response = await http.get(
+      Uri.parse(ApiConstants.arenaMatchReview(maPhong)),
+      headers: headers,
+    );
+
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is Map) {
+        return JsonMap.from(decoded);
+      }
+      if (decoded is List) {
+        return {'DanhSachCauHoi': decoded};
+      }
+    }
+    throw Exception(
+      _extractError(response, 'Không thể tải chi tiết đáp án trận đấu.'),
+    );
   }
 
   static Future<List<JsonMap>> getRealFriends() async {

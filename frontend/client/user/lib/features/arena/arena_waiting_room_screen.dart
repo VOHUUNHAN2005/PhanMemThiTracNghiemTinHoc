@@ -197,7 +197,7 @@ class _ArenaWaitingRoomScreenState extends State<ArenaWaitingRoomScreen> {
                             Navigator.pop(ctx);
                             try {
                               await ArenaService.inviteFriend(friendId);
-                              if (!mounted) return;
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -207,7 +207,7 @@ class _ArenaWaitingRoomScreenState extends State<ArenaWaitingRoomScreen> {
                                 ),
                               );
                             } catch (e) {
-                              if (!mounted) return;
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -525,7 +525,7 @@ class _ArenaWaitingRoomScreenState extends State<ArenaWaitingRoomScreen> {
                                     try {
                                       await ArenaService.kickPlayer(pid);
                                     } catch (e) {
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(

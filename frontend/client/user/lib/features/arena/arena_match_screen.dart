@@ -203,7 +203,7 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
         setState(() {
           _isWaitingOthersInTournament = true;
           _waitingMessage = (data['ThongBao'] ??
-                  'Bạn đã hoàn thành bài thi! Đang chờ các thí sinh khác...')
+                  'Bạn đã hoàn thành 50 câu! Đang chờ các thí sinh khác...')
               .toString();
           _myCorrect =
               int.tryParse((data['SoCauDung'] ?? _myCorrect).toString()) ??
@@ -214,10 +214,14 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
       } else if (event == 'MATCH_FINISHED') {
         _hasFinished = true;
         _timer?.cancel();
+        final int resolvedPhong =
+            int.tryParse((data['MaPhong'] ?? widget.maPhong).toString()) ??
+                widget.maPhong;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => ArenaResultScreen(
+              maPhong: resolvedPhong,
               isTournament: widget.isTournament,
               tenChuDe: widget.tenChuDe,
               myUserId: _myUserId,
@@ -387,6 +391,11 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
                         int.tryParse((p['DaLam'] ?? 0).toString()) ?? 0;
                     final int tong =
                         int.tryParse((p['TongSoCau'] ?? 50).toString()) ?? 50;
+                    final int timeMs = int.tryParse(
+                          (p['TongThoiGianTraLoiMs'] ?? 0).toString(),
+                        ) ??
+                        0;
+                    final String timeSec = (timeMs / 1000.0).toStringAsFixed(1);
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -402,7 +411,9 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
                               isMe ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
-                      subtitle: Text('Tiến độ: $daLam/$tong câu'),
+                      subtitle: Text(
+                        'Tiến độ: $daLam/$tong câu • Thời gian: ${timeSec}s',
+                      ),
                       trailing: Text(
                         '$pCorrect đúng',
                         style: const TextStyle(
@@ -514,6 +525,12 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
                     color: Color(0xFF0F172A),
                   ),
                 ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Đáp án sẽ được mở khóa ngay khi toàn bộ thí sinh hoàn thành.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
                   onPressed: _showLiveLeaderboardSheet,
@@ -533,7 +550,7 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
 
     final q = _currentQuestion!;
     final int thuTuCau = int.tryParse((q['ThuTuCau'] ?? 1).toString()) ?? 1;
-    final int tongSoCau = int.tryParse((q['TongSoCau'] ?? 20).toString()) ?? 20;
+    final int tongSoCau = int.tryParse((q['TongSoCau'] ?? 50).toString()) ?? 50;
     final String noiDung = (q['NoiDung'] ?? '').toString();
     final bool multiChoice = q['ChoPhepNhieuDapAn'] == true;
     final List options = q['DapAn'] is List ? List.from(q['DapAn']) : [];
@@ -898,10 +915,13 @@ class _ArenaMatchScreenState extends State<ArenaMatchScreen>
         ElevatedButton.icon(
           onPressed: _showLiveLeaderboardSheet,
           icon: const Icon(Icons.leaderboard_rounded, size: 16),
-          label: const Text('BXH Live'),
+          label: const Text(
+            'BXH Live',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5),
+          ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.16),
-            foregroundColor: Colors.white,
+            backgroundColor: const Color(0xFFFBBF24),
+            foregroundColor: const Color(0xFF1E293B),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),

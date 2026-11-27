@@ -404,8 +404,6 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
     if (!mounted) return;
 
     final titleController = TextEditingController();
-    final questionCountController = TextEditingController(text: '50');
-    final durationController = TextEditingController(text: '45');
     final passwordController = TextEditingController();
     final rulesController = TextEditingController();
 
@@ -434,7 +432,6 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header giống modal tạo đề thủ công
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 14, 14),
                       child: Row(
@@ -459,7 +456,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Tạo Đề & Phòng Giải Đấu',
+                                  'Tạo Phòng Giải Đấu (50 Câu)',
                                   style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
@@ -468,7 +465,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                 ),
                                 SizedBox(height: 3),
                                 Text(
-                                  'Thiết lập đề thi giải đấu, tính giờ & xếp hạng Top 1 (+100 Cúp)',
+                                  '50 câu ngẫu nhiên • 15–30s/câu • Top 1 (+100 Cúp)',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Color(0xFF64748B),
@@ -490,20 +487,17 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                       ),
                     ),
                     const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                    // Nội dung form cuộn được
                     Flexible(
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 1. Tên giải đấu / Đề thi
                             TextField(
                               controller: titleController,
                               decoration: InputDecoration(
                                 labelText:
-                                    'Tên giải đấu / Đề thi * (Tối thiểu 3 ký tự)',
+                                    'Tên giải đấu * (Tối thiểu 3 ký tự)',
                                 hintText: 'VD: Giải đấu Tin học Văn phòng mở rộng',
                                 prefixIcon: const Icon(
                                   Icons.title_rounded,
@@ -526,10 +520,8 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                               ),
                             ),
                             const SizedBox(height: 14),
-
-                            // 2. Phạm vi chủ đề
                             const Text(
-                              'Phạm vi chủ đề',
+                              'Chủ đề thi đấu (Yêu cầu kho >= 50 câu hoạt động)',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w700,
@@ -602,70 +594,41 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                 },
                               ),
                             const SizedBox(height: 14),
-
-                            // 3. Số câu & Thời gian (phút)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: questionCountController,
-                                    keyboardType: TextInputType.number,
-                                    decoration: InputDecoration(
-                                      labelText: 'Số câu hỏi *',
-                                      prefixIcon: const Icon(
-                                        Icons.format_list_numbered_rounded,
-                                        size: 20,
-                                      ),
-                                      filled: true,
-                                      fillColor: const Color(0xFFF8FAFC),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFCBD5E1),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFCBD5E1),
-                                        ),
-                                      ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: const Color(0xFFC7D2FE),
+                                ),
+                              ),
+                              child: const Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Thể lệ Giải đấu chuẩn:',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF1E3A8A),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: durationController,
-                                    keyboardType: TextInputType.number,
-                                    decoration: InputDecoration(
-                                      labelText: 'Thời gian (phút) *',
-                                      prefixIcon: const Icon(
-                                        Icons.timer_outlined,
-                                        size: 20,
-                                      ),
-                                      filled: true,
-                                      fillColor: const Color(0xFFF8FAFC),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFCBD5E1),
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                        borderSide: const BorderSide(
-                                          color: Color(0xFFCBD5E1),
-                                        ),
-                                      ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    '• Bộ đề 50 câu hỏi độc lập (15s Dễ / 20s TB / 30s Khó).\n'
+                                    '• Hoàn thành > 30% (>= 16 câu) để nhận Cúp: Top 1 (+100), Top 2 (+70), Top 3 (+50), Top 4+ (+25).',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF334155),
+                                      height: 1.4,
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(height: 14),
-
-                            // 4. Trạng thái phòng & Mật khẩu
                             const Text(
                               'Chế độ phòng thi đấu',
                               style: TextStyle(
@@ -725,7 +688,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                 obscureText: true,
                                 decoration: InputDecoration(
                                   labelText: 'Mật khẩu phòng *',
-                                  hintText: 'Nhập mật khẩu để vào giải đấu',
+                                  hintText: 'Nhập mật khẩu để vào phòng',
                                   prefixIcon: const Icon(
                                     Icons.lock_outline_rounded,
                                     size: 20,
@@ -747,17 +710,13 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 14),
-
-                            // 5. Quy chế / Mô tả đề thi
+                            const SizedBox(height: 12),
                             TextField(
                               controller: rulesController,
-                              maxLines: 3,
+                              maxLines: 2,
                               decoration: InputDecoration(
-                                labelText: 'Quy chế / Mô tả đề thi',
-                                hintText:
-                                    'Ghi chú thể lệ giải đấu, cách tính điểm hoặc lưu ý cho thí sinh...',
-                                alignLabelWithHint: true,
+                                labelText: 'Ghi chú / Quy chế thêm (tùy chọn)',
+                                hintText: 'VD: Dành cho nhóm lớp CNTT K20',
                                 filled: true,
                                 fillColor: const Color(0xFFF8FAFC),
                                 border: OutlineInputBorder(
@@ -774,15 +733,22 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                 ),
                               ),
                             ),
-
                             if (errorText != null) ...[
-                              const SizedBox(height: 10),
-                              Text(
-                                errorText!,
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFEF2F2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  errorText!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFB91C1C),
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
@@ -790,89 +756,51 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                         ),
                       ),
                     ),
-
                     const Divider(height: 1, color: Color(0xFFE2E8F0)),
-
-                    // Footer nút Hủy bỏ / Tạo giải đấu giống mẫu
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          OutlinedButton(
+                          TextButton(
                             onPressed: isSubmitting
                                 ? null
                                 : () => Navigator.pop(ctx),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF334155),
-                              side: const BorderSide(color: Color(0xFFCBD5E1)),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 12,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'Hủy bỏ',
-                              style: TextStyle(fontWeight: FontWeight.w700),
-                            ),
+                            child: const Text('Hủy'),
                           ),
                           const SizedBox(width: 10),
                           ElevatedButton(
-                            onPressed: isSubmitting || _topics.isEmpty
+                            onPressed: isSubmitting
                                 ? null
                                 : () async {
                                     final title = titleController.text.trim();
-                                    final qCount = int.tryParse(
-                                            questionCountController.text.trim()) ??
-                                        50;
-                                    final duration = int.tryParse(
-                                            durationController.text.trim()) ??
-                                        45;
-                                    final pwd = passwordController.text.trim();
-
                                     if (title.length < 3) {
-                                      setModalState(
-                                        () => errorText =
-                                            'Tên giải đấu / đề thi cần tối thiểu 3 ký tự.',
-                                      );
+                                      setModalState(() {
+                                        errorText =
+                                            'Vui lòng nhập tên giải đấu tối thiểu 3 ký tự.';
+                                      });
                                       return;
                                     }
                                     if (selectedTopicId <= 0) {
-                                      setModalState(
-                                        () => errorText =
-                                            'Vui lòng chọn phạm vi chủ đề.',
-                                      );
+                                      setModalState(() {
+                                        errorText =
+                                            'Vui lòng chọn chủ đề thi đấu.';
+                                      });
                                       return;
                                     }
-                                    if (qCount < 5 || qCount > 200) {
-                                      setModalState(
-                                        () => errorText =
-                                            'Số câu hỏi nên nằm trong khoảng 5 - 200 câu.',
-                                      );
-                                      return;
-                                    }
-                                    if (duration < 1 || duration > 300) {
-                                      setModalState(
-                                        () => errorText =
-                                            'Thời gian thi cần từ 1 đến 300 phút.',
-                                      );
-                                      return;
-                                    }
+                                    final pwd = passwordController.text.trim();
                                     if (visibilityMode == 'PRIVATE' &&
                                         pwd.isEmpty) {
-                                      setModalState(
-                                        () => errorText =
-                                            'Vui lòng nhập mật khẩu cho phòng riêng tư.',
-                                      );
+                                      setModalState(() {
+                                        errorText =
+                                            'Vui lòng nhập mật khẩu cho phòng riêng tư.';
+                                      });
                                       return;
                                     }
 
                                     setModalState(() {
-                                      errorText = null;
                                       isSubmitting = true;
+                                      errorText = null;
                                     });
 
                                     try {
@@ -883,7 +811,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                         matKhauPhong:
                                             visibilityMode == 'PRIVATE'
                                                 ? pwd
-                                                : '',
+                                                : null,
                                       );
 
                                       final roomId = int.tryParse(
@@ -896,8 +824,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
 
                                       final meta = <String, dynamic>{
                                         'tenGiaiDau': title,
-                                        'soCau': qCount,
-                                        'thoiGianPhut': duration,
+                                        'soCau': 50,
                                         'quyChe': rulesController.text.trim(),
                                       };
 
@@ -911,8 +838,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                       final enrichedLobby = <String, dynamic>{
                                         ...lobby,
                                         'TenGiaiDau': title,
-                                        'SoCau': qCount,
-                                        'ThoiGianPhut': duration,
+                                        'SoCau': 50,
                                         'QuyChe': rulesController.text.trim(),
                                       };
 
@@ -1003,7 +929,6 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
               ...lobby,
               'TenGiaiDau': extraMeta['tenGiaiDau'],
               'SoCau': extraMeta['soCau'],
-              'ThoiGianPhut': extraMeta['thoiGianPhut'],
               'QuyChe': extraMeta['quyChe'],
             }
           : lobby;
@@ -1152,7 +1077,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                               child: _buildModeTab(
                                 index: 1,
                                 title: 'Giải đấu Phòng',
-                                subtitle: 'Tạo đề • Top 1 +100 Cúp',
+                                subtitle: '50 câu • Top 1 +100 Cúp',
                               ),
                             ),
                           ],
@@ -1440,7 +1365,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
           child: ElevatedButton.icon(
             onPressed: _showCreateTournamentModal,
             icon: const Icon(Icons.add_circle_outline_rounded),
-            label: const Text('Tạo Đề & Phòng Giải Đấu'),
+            label: const Text('Tạo Phòng Giải Đấu (50 Câu)'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF6D28D9),
               foregroundColor: Colors.white,
@@ -1480,7 +1405,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
-              'Hiện chưa có phòng giải đấu nào đang chờ.\nHãy bấm nút phía trên để tạo đề & phòng mới!',
+              'Hiện chưa có phòng giải đấu nào đang chờ.\nHãy bấm nút phía trên để tạo phòng giải đấu mới!',
               textAlign: TextAlign.center,
               style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
@@ -1499,9 +1424,6 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                     ? extra!['tenGiaiDau'].toString()
                     : (room['TenChuDe'] ?? '').toString();
             final String topicName = (room['TenChuDe'] ?? '').toString();
-            final String qInfo = extra != null
-                ? '${extra['soCau']} câu • ${extra['thoiGianPhut']} phút • '
-                : '';
 
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -1562,7 +1484,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '$qInfo$topicName • Chủ phòng: $chuPhong • $soNguoi người đang chờ',
+                          '50 câu • $topicName • Chủ phòng: $chuPhong • $soNguoi người đang chờ',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

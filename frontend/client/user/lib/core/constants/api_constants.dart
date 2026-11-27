@@ -17,6 +17,7 @@ class ApiConstants {
 
   static int get _lanPort => int.tryParse(_lanPortRaw) ?? 8000;
 
+  // ignore: unused_field
   static const String _ngrokHost = 'your-ngrok-domain.ngrok-free.app';
 
   // Trên Web (Chrome/Edge), nếu không truyền API_HOST riêng thì dùng localhost
@@ -98,7 +99,6 @@ class ApiConstants {
   static String searchFriends(String keyword) =>
       '$baseUrl/api/friends/search?q=${Uri.encodeQueryComponent(keyword.trim())}';
 
-  // [ĐÃ THÊM] Xem hồ sơ chi tiết của một người chơi / bạn bè
   static String friendProfile(Object targetUserId) =>
       '$baseUrl/api/friends/profile/$targetUserId';
 
@@ -125,4 +125,7 @@ class ApiConstants {
 
   static String kickArenaPlayer(Object targetUserId) =>
       '$baseUrl/api/arena/rooms/kick/$targetUserId';
+
+  static String arenaMatchReview(Object maPhong) =>
+      '$baseUrl/api/arena/history/$maPhong/review';
 }
