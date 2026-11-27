@@ -59,7 +59,6 @@ class DefaultFirebaseOptions {
     projectId: 'it-quiz-app-f6fb2',
     storageBucket: 'it-quiz-app-f6fb2.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyB4WQcnvVxP58K3WgQkN2rKf8_2vrT2u5w',
     appId: '1:292109744507:ios:1c7ee883e48c319538e5de',

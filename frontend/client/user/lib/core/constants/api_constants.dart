@@ -1,8 +1,9 @@
 class ApiConstants {
-  static const bool useNgrok = false;
-  static const String _lanHost = '192.168.20.63';
+    static const String _lanHost = '192.168.40.102';
   static const int _lanPort = 8000;
-  static const String _ngrokHost = 'your-ngrok-domain.ngrok-free.app';
+  static const bool useNgrok = true;
+
+  static const String _ngrokHost = 'pound-trailside-brim.ngrok-free.dev';
 
   static String get baseUrl {
     if (useNgrok) {
@@ -18,7 +19,6 @@ class ApiConstants {
     return 'ws://$_lanHost:$_lanPort';
   }
 
-  // Auth & User
   static String get getMe => '$baseUrl/api/users/get_me';
   static String get updateMe => '$baseUrl/api/users/update_me';
   static String get uploadAvatar => '$baseUrl/api/users/upload_avatar';
@@ -32,7 +32,6 @@ class ApiConstants {
   static String homeExamsByTopic(Object topicId) =>
       '$baseUrl/api/home/topics/$topicId/exams';
 
-  // Official Exam
   static String startOfficialExam(Object examId) =>
       '$baseUrl/api/official/exams/$examId/start';
 
@@ -45,7 +44,6 @@ class ApiConstants {
   static String abortOfficialExam(Object sessionId) =>
       '$baseUrl/api/official/attempts/$sessionId/abort';
 
-  // Practice
   static String get practiceTopics => '$baseUrl/api/practice/topics';
 
   static String practiceExamsByTopic(Object topicId) =>
@@ -63,7 +61,6 @@ class ApiConstants {
   static String cancelPractice(Object sessionId) =>
       '$baseUrl/api/practice/attempts/$sessionId';
 
-  // Friends
   static String get friendsList => '$baseUrl/api/friends/';
   static String get friendRequests => '$baseUrl/api/friends/requests';
   static String get sendFriendRequest => '$baseUrl/api/friends/request';
@@ -78,7 +75,6 @@ class ApiConstants {
   static String unfriend(Object friendUserId) =>
       '$baseUrl/api/friends/$friendUserId';
 
-  // Arena
   static String get createArenaRoom => '$baseUrl/api/arena/rooms';
   static String get joinArenaRoom => '$baseUrl/api/arena/rooms/join';
   static String get inviteArenaFriend => '$baseUrl/api/arena/rooms/invite';

@@ -94,6 +94,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: jsonEncode({
           'TenDangNhap': username,

@@ -105,6 +105,7 @@ class ArenaService {
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      'ngrok-skip-browser-warning': 'true'
     };
   }
 
