@@ -18,8 +18,18 @@ def verify_firebase_token(
     res: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
     try:
-        return auth.verify_id_token(res.credentials)
-    except Exception:
+        return auth.verify_id_token(res.credentials, clock_skew_seconds=10)
+    except TypeError:
+        try:
+            return auth.verify_id_token(res.credentials)
+        except Exception as e:
+            print("Verify Firebase token error:", e)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token không hợp lệ hoặc đã hết hạn.",
+            )
+    except Exception as e:
+        print("Verify Firebase token error:", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token không hợp lệ hoặc đã hết hạn.",

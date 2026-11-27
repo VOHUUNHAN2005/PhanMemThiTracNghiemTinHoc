@@ -44,13 +44,14 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (!mounted) return;
-      _showSnackBar('Đăng nhập thành công! Chào ${userProfile.hoTen}', Colors.green);
+      _showSnackBar(
+        'Đăng nhập thành công! Chào ${userProfile.hoTen}',
+        Colors.green,
+      );
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (_) => const HomeScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
       );
     } on FirebaseAuthException catch (e) {
       String msg = 'Email hoặc mật khẩu không chính xác.';
@@ -68,9 +69,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   @override
@@ -85,40 +86,55 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Container(
-                  width: 68,
-                  height: 68,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1D5CE5),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Text(
-                    'TH',
-                    style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.asset(
+                      'assets/logo_app.png',
+                      width: 100,
+                      height: 100,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text('Thi Trắc Nghiệm Tin Học', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const Text('Đăng nhập để bắt đầu luyện thi', style: TextStyle(color: Colors.grey)),
+                const Text(
+                  'Thi Trắc Nghiệm Tin Học',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const Text(
+                  'Đăng nhập để bắt đầu luyện thi',
+                  style: TextStyle(color: Colors.grey),
+                ),
                 const SizedBox(height: 20),
                 Card(
                   color: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.all(18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Email', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Email',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 6),
                         TextField(
                           controller: emailCtrl,
                           keyboardType: TextInputType.emailAddress,
-                          decoration: const InputDecoration(hintText: 'example@gmail.com', border: OutlineInputBorder()),
+                          decoration: const InputDecoration(
+                            hintText: 'example@gmail.com',
+                            border: OutlineInputBorder(),
+                          ),
                         ),
                         const SizedBox(height: 12),
-                        const Text('Mật khẩu', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Mật khẩu',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         const SizedBox(height: 6),
                         TextField(
                           controller: passCtrl,
@@ -127,8 +143,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             hintText: '••••••••',
                             border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
-                              icon: Icon(anMatKhau ? Icons.visibility : Icons.visibility_off),
-                              onPressed: () => setState(() => anMatKhau = !anMatKhau),
+                              icon: Icon(
+                                anMatKhau
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: () =>
+                                  setState(() => anMatKhau = !anMatKhau),
                             ),
                           ),
                         ),
@@ -152,9 +173,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ? const SizedBox(
                                     height: 20,
                                     width: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
                                   )
-                                : const Text('Đăng nhập', style: TextStyle(fontWeight: FontWeight.bold)),
+                                : const Text(
+                                    'Đăng nhập',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           ),
                         ),
                       ],
@@ -167,14 +196,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const RegisterScreen(),
+                        ),
                       ),
                       child: const Text('Đăng ký tài khoản'),
                     ),
                     TextButton(
                       onPressed: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const ForgotPasswordScreen(),
+                        ),
                       ),
                       child: const Text('Quên mật khẩu?'),
                     ),

@@ -12,13 +12,26 @@ class AuthService {
     required String password,
     String deviceId = 'FLUTTER_CLIENT',
   }) async {
-    await _auth.signInWithEmailAndPassword(email: email.trim(), password: password);
+    final cred = await _auth.signInWithEmailAndPassword(
+      email: email.trim(),
+      password: password,
+    );
+
+    // Đảm bảo ID token mới đã sẵn sàng trước khi gọi API backend ở nhịp đầu
+    await cred.user?.getIdToken(true);
 
     final res = await ApiClient.get(ApiConstants.getMe);
     if (res.statusCode != 200) {
+      String detailMessage = 'Không thể tải thông tin tài khoản.';
+      try {
+        final err = jsonDecode(utf8.decode(res.bodyBytes));
+        if (err is Map && err['detail'] != null) {
+          detailMessage = err['detail'].toString();
+        }
+      } catch (_) {}
+
       await _auth.signOut();
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      throw err['detail'] ?? 'Không thể tải thông tin tài khoản.';
+      throw detailMessage;
     }
 
     final userData = jsonDecode(utf8.decode(res.bodyBytes));
@@ -46,6 +59,8 @@ class AuthService {
       password: password,
     );
 
+    await cred.user?.getIdToken(true);
+
     final res = await ApiClient.post(
       ApiConstants.register,
       body: {
@@ -57,8 +72,14 @@ class AuthService {
     if (res.statusCode != 201) {
       // Rollback user Firebase nếu lưu SQL Server thất bại (ví dụ trùng username)
       await cred.user?.delete();
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      throw err['detail'] ?? 'Đăng ký thất bại.';
+      String detailMessage = 'Đăng ký thất bại.';
+      try {
+        final err = jsonDecode(utf8.decode(res.bodyBytes));
+        if (err is Map && err['detail'] != null) {
+          detailMessage = err['detail'].toString();
+        }
+      } catch (_) {}
+      throw detailMessage;
     }
   }
 

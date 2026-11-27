@@ -30,39 +30,39 @@ class _HomeScreenState extends State<HomeScreen> {
       'min': 0,
       'max': 500,
       'color': Color(0xFFB45309),
-      'asset': 'assets/images/ranks/Rank_đồng.png',
+      'asset': 'assets/images/ranks/copper.png',
       'icon': Icons.shield_rounded,
     },
     {
       'name': 'Bạc',
       'min': 500,
-      'max': 1000,
+      'max': 1500,
       'color': Color(0xFF64748B),
-      'asset': 'assets/images/ranks/Rank_bạc.png',
+      'asset': 'assets/images/ranks/sliver.png',
       'icon': Icons.shield_rounded,
     },
     {
       'name': 'Vàng',
-      'min': 1000,
-      'max': 1500,
+      'min': 1500,
+      'max': 5000,
       'color': Color(0xFFD97706),
-      'asset': 'assets/images/ranks/Rank_vàng.png',
+      'asset': 'assets/images/ranks/gold.png',
       'icon': Icons.shield_rounded,
     },
     {
       'name': 'Kim Cương',
-      'min': 1500,
-      'max': 2000,
+      'min': 5000,
+      'max': 10000,
       'color': Color(0xFF2563EB),
-      'asset': 'assets/images/ranks/Rank_kim_cương.png',
+      'asset': 'assets/images/ranks/diamond.png',
       'icon': Icons.diamond_rounded,
     },
     {
       'name': 'Cao Thủ',
-      'min': 2000,
-      'max': 3000,
+      'min': 10000,
+      'max': null,
       'color': Color(0xFF7C3AED),
-      'asset': 'assets/images/ranks/Rank_cao_thủ.png',
+      'asset': 'assets/images/ranks/master.png',
       'icon': Icons.workspace_premium_rounded,
     },
   ];
@@ -92,9 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _formatNumber(int number) {
     return number.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]}.',
-        );
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
   }
 
   String _getInitials(String fullName) {
@@ -108,21 +108,15 @@ class _HomeScreenState extends State<HomeScreen> {
     return '${parts[parts.length - 2][0]}${parts.last[0]}'.toUpperCase();
   }
 
-  int _resolveCurrentRankIndex(int cups, String tenHang) {
-    final idxByName = _ranks.indexWhere(
-      (r) =>
-          (r['name'] as String).toLowerCase() == tenHang.trim().toLowerCase(),
-    );
-    if (idxByName != -1) return idxByName;
-    if (cups >= 2000) return 4;
-    if (cups >= 1500) return 3;
-    if (cups >= 1000) return 2;
-    if (cups >= 500) return 1;
+  int _resolveCurrentRankIndex(int cups) {
+    for (int i = _ranks.length - 1; i >= 0; i--) {
+      if (cups >= (_ranks[i]['min'] as int)) return i;
+    }
     return 0;
   }
 
   Widget _buildRankBadgeImage(
-    Map<String, Object> rank, {
+    Map<String, Object?> rank, {
     required double size,
     required Color fallbackColor,
   }) {
@@ -130,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final IconData fallbackIcon = rank['icon'] as IconData;
 
     if (assetPath == null || assetPath.isEmpty) {
-      return Icon(fallbackIcon, color: fallbackColor, size: size * 0.75);
+      return Icon(fallbackIcon, color: fallbackColor, size: size);
     }
 
     return Image.asset(
@@ -139,11 +133,8 @@ class _HomeScreenState extends State<HomeScreen> {
       height: size,
       fit: BoxFit.contain,
       filterQuality: FilterQuality.high,
-      errorBuilder: (_, _, _) => Icon(
-        fallbackIcon,
-        color: fallbackColor,
-        size: size * 0.75,
-      ),
+      errorBuilder: (_, _, _) =>
+          Icon(fallbackIcon, color: fallbackColor, size: size),
     );
   }
 
@@ -165,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
           initialProfile: _profile,
           embeddedInHome: true,
           onProfileUpdated: (updated) {
-            if (mounted) setState(() => _profile = updated as UserModel?);
+            if (mounted) setState(() => _profile = updated);
           },
         );
         break;
@@ -189,15 +180,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildDashboard() {
     final String hoTen = _profile?.hoTen ?? 'Người dùng';
     final int soCup = _profile?.soCupHienTai ?? 0;
-    final String tenHang = _profile?.tenHang ?? 'Đồng';
     final String? avatarUrl = _profile?.anhDaiDien;
 
-    final int rankIndex = _resolveCurrentRankIndex(soCup, tenHang);
+    final int rankIndex = _resolveCurrentRankIndex(soCup);
     final currentRank = _ranks[rankIndex];
-    final int targetCup = currentRank['max'] as int;
+    final Color currentRankColor = currentRank['color'] as Color;
+    final bool isMaxRank = rankIndex == _ranks.length - 1;
+    final nextRank = isMaxRank ? currentRank : _ranks[rankIndex + 1];
+
     final int minCup = currentRank['min'] as int;
-    final double progress =
-        ((soCup - minCup) / (targetCup - minCup)).clamp(0.08, 1.0);
+    final int? targetCup = currentRank['max'] as int?;
+    final double progress = (isMaxRank || targetCup == null)
+        ? 1.0
+        : ((soCup - minCup) / (targetCup - minCup)).clamp(0.0, 1.0);
 
     return RefreshIndicator(
       onRefresh: _loadDashboardData,
@@ -205,7 +200,6 @@ class _HomeScreenState extends State<HomeScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           children: [
-            // ================= HEADER XANH ĐẬM + TIẾN TRÌNH CÚP =================
             Container(
               width: double.infinity,
               padding: EdgeInsets.fromLTRB(
@@ -229,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 390,
                   child: Column(
                     children: [
-                      // Hàng thông tin User + Nút cài đặt
                       Row(
                         children: [
                           Container(
@@ -296,7 +289,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 6),
-                                // VỊ TRÍ 1: Huy hiệu rank nhỏ dưới tên người dùng
                                 GestureDetector(
                                   onTap: () => setState(() => _tabIndex = 4),
                                   child: Container(
@@ -305,11 +297,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.14),
+                                      color: currentRankColor.withValues(
+                                        alpha: 0.30,
+                                      ),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: const Color(0xFFFBBF24)
-                                            .withValues(alpha: 0.6),
+                                        color: currentRankColor.withValues(
+                                          alpha: 0.85,
+                                        ),
                                       ),
                                     ),
                                     child: Row(
@@ -317,14 +312,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                       children: [
                                         _buildRankBadgeImage(
                                           currentRank,
-                                          size: 16,
-                                          fallbackColor: const Color(0xFFFBBF24),
+                                          size: 26,
+                                          fallbackColor: currentRankColor,
                                         ),
-                                        const SizedBox(width: 6),
+                                        const SizedBox(width: 2),
                                         Text(
                                           '${currentRank['name']} ›',
                                           style: const TextStyle(
-                                            color: Color(0xFFFDE68A),
+                                            color: Colors.white,
                                             fontSize: 12,
                                             fontWeight: FontWeight.bold,
                                           ),
@@ -355,8 +350,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 18),
-
-                      // Thẻ Tiến trình lên hạng & 5 huy hiệu Rank
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -370,15 +363,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Row(
                               children: [
-                                _buildRankBadgeImage(
-                                  currentRank,
-                                  size: 22,
-                                  fallbackColor: const Color(0xFF38BDF8),
-                                ),
-                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Tiến trình lên ${currentRank['name']}',
+                                    isMaxRank
+                                        ? 'Đã đạt hạng tối đa (${currentRank['name']})'
+                                        : 'Tiến trình lên ${nextRank['name']}',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 13.5,
@@ -387,7 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                                 Text(
-                                  '${_formatNumber(soCup)} / ${_formatNumber(targetCup)}',
+                                  (isMaxRank || targetCup == null)
+                                      ? '${_formatNumber(soCup)} / ∞'
+                                      : '${_formatNumber(soCup)} / ${_formatNumber(targetCup)}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 13.5,
@@ -402,15 +393,15 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: LinearProgressIndicator(
                                 value: progress,
                                 minHeight: 8,
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.18),
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.18,
+                                ),
                                 valueColor: const AlwaysStoppedAnimation<Color>(
                                   Color(0xFF38BDF8),
                                 ),
                               ),
                             ),
                             const SizedBox(height: 16),
-                            // VỊ TRÍ 2: Dãy 5 huy hiệu Rank
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: List.generate(_ranks.length, (i) {
@@ -420,15 +411,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Column(
                                     children: [
                                       Container(
-                                        width: isCurrent ? 48 : 40,
-                                        height: isCurrent ? 48 : 40,
-                                        padding: const EdgeInsets.all(4),
+                                        width: isCurrent ? 53 : 44,
+                                        height: isCurrent ? 53 : 44,
                                         decoration: BoxDecoration(
                                           color: (r['color'] as Color)
                                               .withValues(
-                                                  alpha: isCurrent ? 0.35 : 0.18),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                                alpha: isCurrent ? 0.35 : 0.18,
+                                              ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                           border: Border.all(
                                             color: isCurrent
                                                 ? const Color(0xFFFBBF24)
@@ -438,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                         child: _buildRankBadgeImage(
                                           r,
-                                          size: isCurrent ? 36 : 28,
+                                          size: isCurrent ? 40 : 31,
                                           fallbackColor: isCurrent
                                               ? const Color(0xFF7DD3FC)
                                               : Colors.white70,
@@ -472,8 +464,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-
-            // ================= 4 Ô TÍNH NĂNG & QUẢN LÝ BẠN BÈ =================
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               child: Center(
@@ -481,7 +471,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 390,
                   child: Column(
                     children: [
-                      // Hàng 1: Ôn tập & Thi chính thức
                       Row(
                         children: [
                           Expanded(
@@ -502,21 +491,20 @@ class _HomeScreenState extends State<HomeScreen> {
                               title: 'Thi chính thức',
                               subtitle: 'Đạt: +100 cúp',
                               subtitleColor: const Color(0xFF2563EB),
-                              onTap: () {
-                                Navigator.push(
+                              onTap: () async {
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => const OfficialExamScreen(),
                                   ),
                                 );
+                                _loadDashboardData();
                               },
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 14),
-
-                      // Hàng 2: Thi đấu trực tuyến & Lịch sử & BXH
                       Row(
                         children: [
                           Expanded(
@@ -543,8 +531,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // Thanh banner Quản lý bạn bè
                       GestureDetector(
                         onTap: () => setState(() => _tabIndex = 3),
                         child: Container(
@@ -562,8 +548,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(22),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF1E3A8A)
-                                    .withValues(alpha: 0.22),
+                                color: const Color(
+                                  0xFF1E3A8A,
+                                ).withValues(alpha: 0.22),
                                 blurRadius: 14,
                                 offset: const Offset(0, 6),
                               ),

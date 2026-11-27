@@ -6,12 +6,41 @@ typedef JsonMap = Map<String, dynamic>;
 typedef JsonList = List<JsonMap>;
 
 class FriendService {
+  dynamic _safeDecode(List<int> bodyBytes) {
+    final raw = utf8.decode(bodyBytes).trim();
+    if (raw.isEmpty) return null;
+    return jsonDecode(raw);
+  }
+
+  String _extractErrorMessage(dynamic decoded, String fallback) {
+    if (decoded is Map) {
+      final detail = decoded['detail'] ?? decoded['message'] ?? decoded['error'];
+      if (detail != null && detail.toString().trim().isNotEmpty) {
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] != null) {
+            return first['msg'].toString();
+          }
+          return first.toString();
+        }
+        return detail.toString();
+      }
+    }
+    if (decoded is String && decoded.trim().isNotEmpty) {
+      return decoded.trim();
+    }
+    return fallback;
+  }
+
   JsonList _parseJsonList(dynamic decoded) {
     final List rawList = decoded is List
         ? decoded
         : (decoded is Map && decoded['data'] is List
             ? decoded['data'] as List
-            : const []);
+            : (decoded is Map && decoded['items'] is List
+                ? decoded['items'] as List
+                : const []));
+
     return rawList
         .whereType()
         .map((item) => Map<String, dynamic>.from(item))
@@ -25,32 +54,47 @@ class FriendService {
   }
 
   Future<JsonList> searchUsers(String keyword) async {
-    if (keyword.trim().isEmpty) return [];
-    final res = await ApiClient.get(ApiConstants.searchFriends(keyword));
-    final body = jsonDecode(utf8.decode(res.bodyBytes));
+    final trimmed = keyword.trim();
+    if (trimmed.isEmpty) return [];
+
+    final res = await ApiClient.get(ApiConstants.searchFriends(trimmed));
+    final body = _safeDecode(res.bodyBytes);
     if (res.statusCode != 200) {
-      final err = _parseJsonMap(body);
-      throw err['detail'] ?? 'Lỗi tìm kiếm người dùng.';
+      throw Exception(_extractErrorMessage(body, 'Lỗi tìm kiếm người dùng.'));
     }
     return _parseJsonList(body);
   }
 
   Future<JsonList> getFriends() async {
     final res = await ApiClient.get(ApiConstants.friendsList);
-    final body = jsonDecode(utf8.decode(res.bodyBytes));
+    final body = _safeDecode(res.bodyBytes);
     if (res.statusCode != 200) {
-      final err = _parseJsonMap(body);
-      throw err['detail'] ?? 'Không thể tải danh sách bạn bè.';
+      throw Exception(
+        _extractErrorMessage(body, 'Không thể tải danh sách bạn bè.'),
+      );
     }
     return _parseJsonList(body);
   }
 
   Future<JsonMap> getFriendRequests() async {
     final res = await ApiClient.get(ApiConstants.friendRequests);
-    final body = jsonDecode(utf8.decode(res.bodyBytes));
+    final body = _safeDecode(res.bodyBytes);
     if (res.statusCode != 200) {
-      final err = _parseJsonMap(body);
-      throw err['detail'] ?? 'Không thể tải danh sách lời mời.';
+      throw Exception(
+        _extractErrorMessage(body, 'Không thể tải danh sách lời mời.'),
+      );
+    }
+    return _parseJsonMap(body);
+  }
+
+  // Xem hồ sơ chi tiết của một người chơi / bạn bè
+  Future<JsonMap> getFriendProfile(int targetUserId) async {
+    final res = await ApiClient.get(ApiConstants.friendProfile(targetUserId));
+    final body = _safeDecode(res.bodyBytes);
+    if (res.statusCode != 200) {
+      throw Exception(
+        _extractErrorMessage(body, 'Không thể tải hồ sơ người chơi.'),
+      );
     }
     return _parseJsonMap(body);
   }
@@ -60,10 +104,11 @@ class FriendService {
       ApiConstants.sendFriendRequest,
       body: {'MaNguoiNhan': maNguoiNhan},
     );
-    if (res.statusCode != 201) {
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      final map = _parseJsonMap(err);
-      throw map['detail'] ?? 'Không thể gửi lời mời kết bạn.';
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      final body = _safeDecode(res.bodyBytes);
+      throw Exception(
+        _extractErrorMessage(body, 'Không thể gửi lời mời kết bạn.'),
+      );
     }
   }
 
@@ -79,28 +124,27 @@ class FriendService {
       },
     );
     if (res.statusCode != 200) {
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      final map = _parseJsonMap(err);
-      throw map['detail'] ?? 'Không thể xử lý lời mời kết bạn.';
+      final body = _safeDecode(res.bodyBytes);
+      throw Exception(
+        _extractErrorMessage(body, 'Không thể xử lý lời mời kết bạn.'),
+      );
     }
   }
 
   Future<void> cancelSentRequest(int targetUserId) async {
     final res =
         await ApiClient.delete(ApiConstants.cancelSentRequest(targetUserId));
-    if (res.statusCode != 200) {
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      final map = _parseJsonMap(err);
-      throw map['detail'] ?? 'Không thể hủy lời mời.';
+    if (res.statusCode != 200 && res.statusCode != 204) {
+      final body = _safeDecode(res.bodyBytes);
+      throw Exception(_extractErrorMessage(body, 'Không thể hủy lời mời.'));
     }
   }
 
   Future<void> unfriend(int friendUserId) async {
     final res = await ApiClient.delete(ApiConstants.unfriend(friendUserId));
-    if (res.statusCode != 200) {
-      final err = jsonDecode(utf8.decode(res.bodyBytes));
-      final map = _parseJsonMap(err);
-      throw map['detail'] ?? 'Không thể hủy kết bạn.';
+    if (res.statusCode != 200 && res.statusCode != 204) {
+      final body = _safeDecode(res.bodyBytes);
+      throw Exception(_extractErrorMessage(body, 'Không thể hủy kết bạn.'));
     }
   }
 }

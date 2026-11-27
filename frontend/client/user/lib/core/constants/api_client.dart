@@ -30,6 +30,7 @@ class ApiClient {
     final res = await requestFn(headers);
 
     if (res.statusCode == 401 && FirebaseAuth.instance.currentUser != null) {
+      await Future.delayed(const Duration(milliseconds: 300));
       final refreshedHeaders =
           await _getHeaders(isJson: isJson, forceRefresh: true);
       return requestFn(refreshedHeaders);
@@ -104,6 +105,7 @@ class ApiClient {
 
     final res = await sendMultipart(false);
     if (res.statusCode == 401 && FirebaseAuth.instance.currentUser != null) {
+      await Future.delayed(const Duration(milliseconds: 300));
       return sendMultipart(true);
     }
     return res;

@@ -130,6 +130,59 @@ class _PracticeScreenState extends State<PracticeScreen> {
     }
   }
 
+  Future<void> _cancelAndRestart({
+    int? maLuotLam,
+    int? maBoDe,
+    String? topicName,
+  }) async {
+    final targetSessionId = maLuotLam ?? _maLuotLam;
+    final targetExamId = maBoDe ?? _currentBoDeId;
+    if (targetSessionId == null || targetExamId == null) return;
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hủy lượt làm dở'),
+        content: const Text(
+          'Tiến độ hiện tại của lượt ôn tập này sẽ bị hủy và bạn sẽ bắt đầu lại từ đầu. Bạn có chắc không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Giữ tiến độ'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Hủy & làm lại'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+    try {
+      await _service.cancelPractice(targetSessionId);
+      _showSnackBar('Đã hủy lượt làm dở, bắt đầu lại từ đầu.', isError: false);
+      await _startPractice(
+        targetExamId,
+        topicName: topicName ?? _currentTopicTitle,
+      );
+      if (_selectedTopic != null) {
+        await _openTopic(_selectedTopic!);
+      }
+    } catch (e) {
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   void _toggleOption(Map question, int maDapAn) {
     if (question['DaKiemTra'] == true) return;
     final int maCauHoi = question['MaCauHoi'];
@@ -181,7 +234,12 @@ class _PracticeScreenState extends State<PracticeScreen> {
           currentQ['DaKiemTra'] = true;
           currentQ['LaCauDung'] = res['LaCauDung'];
           currentQ['MaDapAnDaChon'] = res['MaDapAnDaChon'];
-          currentQ['DapAn'] = res['DapAn'];
+          if (res['DapAn'] != null) {
+            currentQ['DapAn'] = res['DapAn'];
+          }
+          if (res['GiaiThich'] != null) {
+            currentQ['GiaiThich'] = res['GiaiThich'];
+          }
         });
       }
     } catch (e) {
@@ -472,6 +530,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
       final currentQ = _questions[_currentIndex];
       final int maCauHoi = currentQ['MaCauHoi'];
       final bool daKiemTra = currentQ['DaKiemTra'] == true;
+      final bool laCauDung = currentQ['LaCauDung'] == true;
+      final String? giaiThich = currentQ['GiaiThich']?.toString();
       final bool multi = currentQ['ChoPhepNhieuDapAn'] == true;
       final String questionTypeLabel = (currentQ['TenLoaiCauHoi'] ??
               (multi ? 'Nhiều đáp án' : 'Một đáp án'))
@@ -506,7 +566,10 @@ class _PracticeScreenState extends State<PracticeScreen> {
                           minHeight: 36,
                         ),
                         icon: const Icon(Icons.arrow_back),
-                        onPressed: () => setState(() => buoc = 'chude'),
+                        onPressed: () {
+                          _loadTopicsAndFeatured();
+                          setState(() => buoc = 'chude');
+                        },
                       ),
                       const SizedBox(width: 6),
                       Expanded(
@@ -562,7 +625,23 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _isLoading ? null : () => _cancelAndRestart(),
+                      icon: const Icon(Icons.restart_alt, size: 16),
+                      label: const Text(
+                        'Hủy lượt & làm lại',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: LinearProgressIndicator(
@@ -691,7 +770,51 @@ class _PracticeScreenState extends State<PracticeScreen> {
                       ),
                     );
                   }),
-                  if (!daKiemTra) ...[
+                  if (daKiemTra) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: laCauDung
+                            ? const Color(0xFFECFDF5)
+                            : const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: laCauDung
+                              ? const Color(0xFF10B981)
+                              : const Color(0xFFEF4444),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            laCauDung
+                                ? 'Chính xác! Câu hỏi đã được khóa.'
+                                : 'Chưa chính xác — Đã hiển thị đáp án đúng và khóa câu hỏi.',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: laCauDung
+                                  ? const Color(0xFF065F46)
+                                  : const Color(0xFF991B1B),
+                            ),
+                          ),
+                          if (giaiThich != null &&
+                              giaiThich.trim().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              giaiThich.trim(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF334155),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ] else ...[
                     const SizedBox(height: 6),
                     SizedBox(
                       width: double.infinity,
@@ -876,7 +999,8 @@ class _PracticeScreenState extends State<PracticeScreen> {
                   else
                     ...filteredExams.map((exam) {
                       final int soCau = exam['SoLuongCauHoi'] ?? 0;
-                      final bool dangLamDo = exam['MaLuotDangLam'] != null;
+                      final dynamic rawLuotLamDo = exam['MaLuotDangLam'];
+                      final bool dangLamDo = rawLuotLamDo != null;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
@@ -885,50 +1009,84 @@ class _PracticeScreenState extends State<PracticeScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    exam['TieuDe'] ?? '',
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        exam['TieuDe'] ?? '',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Chủ đề: $topicName • $soCau câu',
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => _startPractice(
+                                    exam['MaBoDe'],
+                                    topicName: topicName.toString(),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: dangLamDo
+                                        ? const Color(0xFFFEF3C7)
+                                        : const Color(0xFFD1FAE5),
+                                    foregroundColor: dangLamDo
+                                        ? const Color(0xFF92400E)
+                                        : const Color(0xFF065F46),
+                                    elevation: 0,
+                                  ),
+                                  child: Text(
+                                    dangLamDo ? 'Tiếp tục' : 'Bắt đầu',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 16,
                                     ),
                                   ),
-                                  Text(
-                                    'Chủ đề: $topicName • $soCau câu',
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                            ElevatedButton(
-                              onPressed: () => _startPractice(
-                                exam['MaBoDe'],
-                                topicName: topicName.toString(),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: dangLamDo
-                                    ? const Color(0xFFFEF3C7)
-                                    : const Color(0xFFD1FAE5),
-                                foregroundColor: dangLamDo
-                                    ? const Color(0xFF92400E)
-                                    : const Color(0xFF065F46),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                dangLamDo ? 'Tiếp tục' : 'Bắt đầu',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
+                            if (dangLamDo) ...[
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => _cancelAndRestart(
+                                            maLuotLam: rawLuotLamDo is int
+                                                ? rawLuotLamDo
+                                                : int.tryParse(
+                                                    rawLuotLamDo.toString(),
+                                                  ),
+                                            maBoDe: exam['MaBoDe'],
+                                            topicName: topicName.toString(),
+                                          ),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.redAccent,
+                                    padding: EdgeInsets.zero,
+                                    minimumSize: const Size(0, 28),
+                                  ),
+                                  child: const Text(
+                                    'Hủy lượt làm dở',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       );

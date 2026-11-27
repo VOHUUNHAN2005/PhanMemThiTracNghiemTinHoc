@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
@@ -259,7 +259,7 @@ class ArenaService {
       Uri.parse(ApiConstants.joinArenaRoom),
       headers: headers,
       body: jsonEncode({
-        if (maPhong != null) 'MaPhong': maPhong,
+        'MaPhong': ?maPhong,
         if (maCodePhong != null && maCodePhong.trim().isNotEmpty)
           'MaCodePhong': maCodePhong.trim().toUpperCase(),
         if (matKhauPhong != null && matKhauPhong.trim().isNotEmpty)

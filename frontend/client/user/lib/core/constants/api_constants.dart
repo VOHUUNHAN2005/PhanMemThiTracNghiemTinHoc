@@ -1,24 +1,50 @@
-class ApiConstants {
-    static const String _lanHost = '192.168.40.102';
-  static const int _lanPort = 8000;
-  static const bool useNgrok = true;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
-  static const String _ngrokHost = 'pound-trailside-brim.ngrok-free.dev';
+class ApiConstants {
+  static const bool useNgrok = false;
+
+  // Truyền --dart-define=API_HOST=192.168.x.x khi chạy từ máy khác / điện thoại qua LAN
+  static const String _lanHost = String.fromEnvironment(
+    'API_HOST',
+    defaultValue: '127.0.0.1',
+  );
+
+  // Truyền --dart-define=API_PORT=8000 nếu muốn đổi cổng
+  static const String _lanPortRaw = String.fromEnvironment(
+    'API_PORT',
+    defaultValue: '8000',
+  );
+
+  static int get _lanPort => int.tryParse(_lanPortRaw) ?? 8000;
+
+  static const String _ngrokHost = 'your-ngrok-domain.ngrok-free.app';
+
+  // Trên Web (Chrome/Edge), nếu không truyền API_HOST riêng thì dùng localhost
+  static String get _activeHost {
+    if (kIsWeb && !_lanHost.contains('.')) {
+      return 'localhost';
+    }
+    if (kIsWeb && _lanHost == '127.0.0.1') {
+      return 'localhost';
+    }
+    return _lanHost;
+  }
 
   static String get baseUrl {
     if (useNgrok) {
       return 'https://$_ngrokHost';
     }
-    return 'http://$_lanHost:$_lanPort';
+    return 'http://$_activeHost:$_lanPort';
   }
 
   static String get wsBaseUrl {
     if (useNgrok) {
       return 'wss://$_ngrokHost';
     }
-    return 'ws://$_lanHost:$_lanPort';
+    return 'ws://$_activeHost:$_lanPort';
   }
 
+  // Auth & User
   static String get getMe => '$baseUrl/api/users/get_me';
   static String get updateMe => '$baseUrl/api/users/update_me';
   static String get uploadAvatar => '$baseUrl/api/users/upload_avatar';
@@ -32,6 +58,7 @@ class ApiConstants {
   static String homeExamsByTopic(Object topicId) =>
       '$baseUrl/api/home/topics/$topicId/exams';
 
+  // Official Exam
   static String startOfficialExam(Object examId) =>
       '$baseUrl/api/official/exams/$examId/start';
 
@@ -44,6 +71,7 @@ class ApiConstants {
   static String abortOfficialExam(Object sessionId) =>
       '$baseUrl/api/official/attempts/$sessionId/abort';
 
+  // Practice
   static String get practiceTopics => '$baseUrl/api/practice/topics';
 
   static String practiceExamsByTopic(Object topicId) =>
@@ -61,6 +89,7 @@ class ApiConstants {
   static String cancelPractice(Object sessionId) =>
       '$baseUrl/api/practice/attempts/$sessionId';
 
+  // Friends
   static String get friendsList => '$baseUrl/api/friends/';
   static String get friendRequests => '$baseUrl/api/friends/requests';
   static String get sendFriendRequest => '$baseUrl/api/friends/request';
@@ -69,12 +98,17 @@ class ApiConstants {
   static String searchFriends(String keyword) =>
       '$baseUrl/api/friends/search?q=${Uri.encodeQueryComponent(keyword.trim())}';
 
+  // [ĐÃ THÊM] Xem hồ sơ chi tiết của một người chơi / bạn bè
+  static String friendProfile(Object targetUserId) =>
+      '$baseUrl/api/friends/profile/$targetUserId';
+
   static String cancelSentRequest(Object targetUserId) =>
       '$baseUrl/api/friends/request/$targetUserId';
 
   static String unfriend(Object friendUserId) =>
       '$baseUrl/api/friends/$friendUserId';
 
+  // Arena
   static String get createArenaRoom => '$baseUrl/api/arena/rooms';
   static String get joinArenaRoom => '$baseUrl/api/arena/rooms/join';
   static String get inviteArenaFriend => '$baseUrl/api/arena/rooms/invite';
