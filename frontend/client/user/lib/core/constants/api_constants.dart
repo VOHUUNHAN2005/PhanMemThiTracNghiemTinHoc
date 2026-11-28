@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class ApiConstants {
-  static const bool useNgrok = false;
+  static const bool useNgrok = true;
 
   static const String _lanHost = String.fromEnvironment(
     'API_HOST',
@@ -18,7 +18,6 @@ class ApiConstants {
   static const String _ngrokHost = 'pound-trailside-brim.ngrok-free.dev';
 
   static String get _activeHost {
-    // Android Emulator
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       if (_lanHost == '127.0.0.1') {
         return '10.0.2.2';
