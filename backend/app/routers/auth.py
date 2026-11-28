@@ -239,18 +239,19 @@ async def sync_device_and_push_token(
 
 @router.post("/logout")
 def logout_user(
-    current_user: dict = Depends(get_current_user),
+    token_data: dict = Depends(verify_firebase_token),
     db: Session = Depends(get_db),
 ):
+    firebase_uid = token_data.get("uid")
     db.execute(
         text("""
             UPDATE NguoiDung
             SET TrangThaiOnline = 0,
                 MaThietBiHienTai = NULL,
                 HoatDongCuoi = SYSUTCDATETIME()
-            WHERE MaNguoiDung = :id
+            WHERE FirebaseUid = :uid
         """),
-        {"id": current_user["MaNguoiDung"]},
+        {"uid": firebase_uid},
     )
     db.commit()
     return {"message": "Đã đăng xuất."}

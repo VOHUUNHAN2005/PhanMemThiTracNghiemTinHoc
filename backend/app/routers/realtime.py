@@ -15,36 +15,52 @@ async def websocket_realtime_endpoint(
     device_id: str | None = Query(default=None, description="Unique Device ID"),
 ):
     try:
-        decoded = firebase_auth.verify_id_token(token)
-        firebase_uid = decoded.get("uid")
-    except Exception:
-        await websocket.close(code=4003, reason="Token không hợp lệ.")
+        decoded_token = firebase_auth.verify_id_token(token, clock_skew_seconds=60)
+        firebase_uid = decoded_token.get("uid")
+    except Exception as e:
+        print(f"[WS AUTH ERROR] Từ chối WebSocket: {repr(e)}")
+        await websocket.close(code=4003, reason="Token không hợp lệ hoặc đã hết hạn.")
         return
 
+    clean_device = device_id.strip() if device_id else None
     db = SessionLocal()
     try:
         user = db.execute(
             text("""
-                SELECT MaNguoiDung, TrangThaiTaiKhoan, MaThietBiHienTai
+                SELECT MaNguoiDung, TrangThaiTaiKhoan
                 FROM NguoiDung
                 WHERE FirebaseUid = :uid
             """),
             {"uid": firebase_uid},
         ).mappings().first()
+
+        if not user or user["TrangThaiTaiKhoan"] != "HOAT_DONG":
+            await websocket.close(code=4003, reason="Tài khoản không tồn tại hoặc đang bị khóa.")
+            return
+
+        user_id = user["MaNguoiDung"]
+
+        db.execute(
+            text("""
+                UPDATE NguoiDung
+                SET MaThietBiHienTai = COALESCE(:device, MaThietBiHienTai),
+                    TrangThaiOnline = 1,
+                    HoatDongCuoi = SYSUTCDATETIME()
+                WHERE MaNguoiDung = :id
+            """),
+            {"device": clean_device, "id": user_id},
+        )
+        db.commit()
     finally:
         db.close()
 
-    if not user or user["TrangThaiTaiKhoan"] != "HOAT_DONG":
-        await websocket.close(code=4003, reason="Tài khoản không tồn tại hoặc đang bị khóa.")
-        return
+    old_ws = arena_manager.active_connections.get(user_id)
+    if old_ws and old_ws is not websocket:
+        try:
+            await old_ws.close(code=4001, reason="Tài khoản đã đăng nhập trên thiết bị khác.")
+        except Exception:
+            pass
 
-    active_device = (user.get("MaThietBiHienTai") or "").strip()
-    clean_device = device_id.strip() if device_id else None
-    if clean_device and active_device and clean_device != active_device:
-        await websocket.close(code=4001, reason="Tài khoản đã đăng nhập trên thiết bị khác.")
-        return
-
-    user_id = user["MaNguoiDung"]
     await arena_manager.connect(user_id, websocket)
 
     try:

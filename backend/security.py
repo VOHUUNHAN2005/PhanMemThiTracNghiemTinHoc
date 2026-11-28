@@ -15,21 +15,20 @@ security = HTTPBearer()
 
 
 def verify_firebase_token(
-    res: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
+    if not credentials or not credentials.credentials:
+        print("[AUTH DEBUG] Request bị từ chối vì THIẾU HEADER AUTHORIZATION!")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Thiếu token xác thực.",
+        )
+    token = credentials.credentials
     try:
-        return auth.verify_id_token(res.credentials, clock_skew_seconds=10)
-    except TypeError:
-        try:
-            return auth.verify_id_token(res.credentials)
-        except Exception as e:
-            print("Verify Firebase token error:", e)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token không hợp lệ hoặc đã hết hạn.",
-            )
+        decoded_token = auth.verify_id_token(token, clock_skew_seconds=60)
+        return decoded_token
     except Exception as e:
-        print("Verify Firebase token error:", e)
+        print(f"[AUTH ERROR] Verify token thất bại: {repr(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token không hợp lệ hoặc đã hết hạn.",
@@ -101,19 +100,12 @@ def get_current_user(
         db.commit()
         user = db.execute(query_find, {"uid": firebase_uid}).mappings().first()
     else:
-        active_device = (user.get("MaThietBiHienTai") or "").strip()
-        if clean_device_id and active_device and clean_device_id != active_device:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="SESSION_REPLACED: Tài khoản đã được đăng nhập trên thiết bị khác.",
-            )
-
         db.execute(
             text("""
                 UPDATE NguoiDung
                 SET TrangThaiOnline = 1,
                     HoatDongCuoi = SYSUTCDATETIME(),
-                    MaThietBiHienTai = COALESCE(MaThietBiHienTai, :device_id)
+                    MaThietBiHienTai = COALESCE(:device_id, MaThietBiHienTai)
                 WHERE MaNguoiDung = :id
             """),
             {"id": user["MaNguoiDung"], "device_id": clean_device_id},
