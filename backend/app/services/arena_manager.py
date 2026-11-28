@@ -16,7 +16,7 @@ from app.database import SessionLocal
 
 QUESTIONS_COUNT_1VS1 = 20
 QUESTIONS_COUNT_TOURNAMENT = 50
-MIN_COMPLETION_RATIO = 0.30
+MIN_COMPLETION_RATIO = 0.50
 
 
 DIFFICULTY_SECONDS = {
@@ -84,9 +84,6 @@ class ArenaRealtimeManager:
         self.duel_queues: Dict[int, List[int]] = {}
         self.rooms: Dict[int, ActiveRoomRuntime] = {}
         self.user_room_map: Dict[int, int] = {}
-
-
-
 
     async def connect(self, user_id: int, websocket: WebSocket):
         await websocket.accept()
@@ -162,9 +159,6 @@ class ArenaRealtimeManager:
                     "FRIEND_PRESENCE",
                     {"MaNguoiDung": user_id, "TrangThaiOnline": is_online},
                 )
-
-
-
 
     def _generate_room_code(self, db: Session) -> str:
         while True:
@@ -264,9 +258,6 @@ class ArenaRealtimeManager:
         ).mappings().first()
         return dict(row)
 
-
-
-
     async def create_room(
         self,
         host_id: int,
@@ -284,7 +275,6 @@ class ArenaRealtimeManager:
         try:
             ten_chu_de, questions = self._pick_topic_questions(db, ma_chu_de, required_q)
             code = self._generate_room_code(db)
-
 
             q_json_str = json.dumps(
                 [
@@ -393,9 +383,6 @@ class ArenaRealtimeManager:
             "DuDieuKienBatDau": can_start,
             "NguoiChoi": players_list,
         }
-
-
-
 
     async def invite_friend(self, host_id: int, target_user_id: int) -> dict:
         ma_phong = self.user_room_map.get(host_id)
@@ -543,9 +530,6 @@ class ArenaRealtimeManager:
         await self.send_personal(target_user_id, "KICKED_FROM_ROOM", {"MaPhong": ma_phong})
         await self.broadcast_room(room, "ROOM_LOBBY_UPDATED", self._serialize_lobby(room))
 
-
-
-
     def remove_from_duel_queue(self, user_id: int):
         for q_list in self.duel_queues.values():
             if user_id in q_list:
@@ -555,7 +539,6 @@ class ArenaRealtimeManager:
         if user_id in self.user_room_map:
             await self.send_personal(user_id, "ERROR", {"message": "Bạn đang ở trong phòng đấu khác."})
             return
-
 
         db = SessionLocal()
         try:
@@ -596,9 +579,6 @@ class ArenaRealtimeManager:
                 await self.send_personal(p1_id, "ERROR", {"message": str(e)})
                 await self.send_personal(p2_id, "ERROR", {"message": str(e)})
 
-
-
-
     async def start_room(self, host_id: int):
         ma_phong = self.user_room_map.get(host_id)
         if not ma_phong or ma_phong not in self.rooms:
@@ -633,7 +613,6 @@ class ArenaRealtimeManager:
         finally:
             db.close()
 
-
         await self.broadcast_room(
             room,
             "MATCH_COUNTDOWN",
@@ -659,7 +638,6 @@ class ArenaRealtimeManager:
             },
         )
 
-
         await asyncio.sleep(5)
         if room.status != "DANG_DIEN_RA":
             return
@@ -667,13 +645,9 @@ class ArenaRealtimeManager:
         if room.loai_phong == "DOI_KHANG_1VS1":
             await self._duel_send_shared_question(room)
         else:
-
             for p in room.players.values():
                 if not p.left_or_forfeited:
                     await self._tournament_send_next_question(room, p)
-
-
-
 
     async def _duel_send_shared_question(self, room: ActiveRoomRuntime):
         if room.status != "DANG_DIEN_RA":
@@ -715,11 +689,9 @@ class ArenaRealtimeManager:
         try:
             await asyncio.sleep(timeout_sec + 1)
             if room.status == "DANG_DIEN_RA" and room.shared_q_index == expected_idx:
-
                 for p in room.players.values():
                     if not p.answered_current and not p.left_or_forfeited:
                         p.answered_current = True
-                        p.answered_count += 1
                         p.wrong_count += 1
                         p.total_time_ms += timeout_sec * 1000
                 await self._duel_advance_next(room)
@@ -751,16 +723,12 @@ class ArenaRealtimeManager:
         await asyncio.sleep(1.2)
         await self._duel_send_shared_question(room)
 
-
-
-
     async def _tournament_send_next_question(self, room: ActiveRoomRuntime, player: PlayerRuntime):
         if room.status != "DANG_DIEN_RA" or player.left_or_forfeited:
             return
 
         if player.personal_timer_task and not player.personal_timer_task.done():
             player.personal_timer_task.cancel()
-
 
         if player.current_q_index >= len(room.questions):
             player.finished = True
@@ -835,8 +803,6 @@ class ArenaRealtimeManager:
                 and not player.left_or_forfeited
                 and player.current_q_index == expected_idx
             ):
-
-                player.answered_count += 1
                 player.wrong_count += 1
                 player.total_time_ms += timeout_sec * 1000
                 player.current_q_index += 1
@@ -873,9 +839,6 @@ class ArenaRealtimeManager:
         if all(p.finished or p.left_or_forfeited for p in room.players.values()):
             await self._finalize_room(room, is_cancelled=False)
 
-
-
-
     async def handle_submit_answer(self, user_id: int, ma_cau_hoi: int, selected_ids: List[int]):
         ma_phong = self.user_room_map.get(user_id)
         if not ma_phong or ma_phong not in self.rooms:
@@ -887,7 +850,6 @@ class ArenaRealtimeManager:
         player = room.players.get(user_id)
         if not player or player.left_or_forfeited or player.finished:
             return
-
 
         if room.loai_phong == "DOI_KHANG_1VS1":
             if room.shared_q_index >= len(room.questions) or player.answered_current:
@@ -907,7 +869,6 @@ class ArenaRealtimeManager:
                 player.personal_timer_task.cancel()
             elapsed_ms = max(0, int((time.monotonic() - player.question_started_at) * 1000))
 
-
         if elapsed_ms < 100:
             await self.handle_leave_or_forfeit(ma_phong, user_id, is_cheat=True, cheat_reason="Can thiệp thời gian trả lời")
             return
@@ -916,13 +877,13 @@ class ArenaRealtimeManager:
         correct_set = set(q["correct_ids"])
         is_correct = len(correct_set) > 0 and unique_selected == correct_set
 
-        player.answered_count += 1
+        if len(unique_selected) > 0:
+            player.answered_count += 1
         player.total_time_ms += elapsed_ms
         if is_correct:
             player.correct_count += 1
         else:
             player.wrong_count += 1
-
 
         db = SessionLocal()
         try:
@@ -948,7 +909,6 @@ class ArenaRealtimeManager:
             db.close()
 
         if room.loai_phong == "DOI_KHANG_1VS1":
-
             await self.send_personal(
                 user_id,
                 "ANSWER_RESULT",
@@ -973,14 +933,12 @@ class ArenaRealtimeManager:
                 exclude_user=user_id,
             )
 
-
             active_players = [p for p in room.players.values() if not p.left_or_forfeited]
             if len(active_players) == 2 and all(p.answered_current for p in active_players):
                 if room.shared_timer_task and not room.shared_timer_task.done():
                     room.shared_timer_task.cancel()
                 await self._duel_advance_next(room)
         else:
-
             await self.send_personal(
                 user_id,
                 "TOURNAMENT_ANSWER_RECORDED",
@@ -993,9 +951,6 @@ class ArenaRealtimeManager:
             player.current_q_index += 1
             await self._broadcast_tournament_leaderboard(room)
             await self._tournament_send_next_question(room, player)
-
-
-
 
     async def handle_leave_or_forfeit(
         self,
@@ -1011,7 +966,6 @@ class ArenaRealtimeManager:
 
         player = room.players.get(user_id)
         self.user_room_map.pop(user_id, None)
-
 
         if room.status == "CHO_NGUOI_CHOI":
             room.players.pop(user_id, None)
@@ -1041,7 +995,6 @@ class ArenaRealtimeManager:
             await self.broadcast_room(room, "ROOM_LOBBY_UPDATED", self._serialize_lobby(room))
             return
 
-
         if player:
             player.left_or_forfeited = True
             player.cheated = is_cheat
@@ -1068,7 +1021,6 @@ class ArenaRealtimeManager:
                     "uid": user_id,
                 },
             )
-
 
             if is_cheat:
                 db.execute(
@@ -1098,13 +1050,11 @@ class ArenaRealtimeManager:
                 except Exception:
                     pass
 
-
         if room.loai_phong == "DOI_KHANG_1VS1" and room.status == "DANG_DIEN_RA":
             if room.shared_timer_task and not room.shared_timer_task.done():
                 room.shared_timer_task.cancel()
             await self._finalize_room(room, is_cancelled=True, cancel_reason="Đối thủ đã rời trận hoặc vi phạm quy chế.")
             return
-
 
         if room.loai_phong == "GIAI_DAU_NN" and room.status == "DANG_DIEN_RA":
             await self._broadcast_tournament_leaderboard(room)
@@ -1113,9 +1063,6 @@ class ArenaRealtimeManager:
                 await self._finalize_room(room, is_cancelled=True, cancel_reason="Các thí sinh khác đã rời phòng.")
             else:
                 await self._check_tournament_all_done(room)
-
-
-
 
     async def _finalize_room(
         self,
@@ -1128,7 +1075,8 @@ class ArenaRealtimeManager:
 
         room.status = "DA_HUY" if is_cancelled else "DA_KET_THUC"
         total_questions = len(room.questions)
-        min_required_answered = math.floor(total_questions * MIN_COMPLETION_RATIO) + 1
+        # Bắt buộc làm đúng > 50% tổng số câu (VD: >= 11/20 câu hoặc >= 26/50 câu) mới được cộng cúp
+        min_required_correct = math.floor(total_questions * MIN_COMPLETION_RATIO) + 1
 
         ranked_players = sorted(
             room.players.values(),
@@ -1151,32 +1099,31 @@ class ArenaRealtimeManager:
                 cup_delta = 0
                 loai_bien_dong = "THANG_1VS1" if room.loai_phong == "DOI_KHANG_1VS1" else "GIAI_DAU_NN"
                 ket_qua_label = "THUA"
+                is_qualified_for_cup = p.correct_count >= min_required_correct
 
                 if p.cheated or p.left_or_forfeited:
                     cup_delta = 0
                     ket_qua_label = "VI_PHAM" if p.cheated else "BO_CUOC"
                 elif is_cancelled:
-
                     ket_qua_label = "HUY_TRAN"
-                    if p.answered_count >= min_required_answered:
+                    if is_qualified_for_cup:
                         cup_delta = CUP_1VS1_OPPONENT_LEFT
                 else:
-
                     if room.loai_phong == "DOI_KHANG_1VS1":
                         if rank_idx == 1:
                             ket_qua_label = "THANG"
                             loai_bien_dong = "THANG_1VS1"
-                            if p.answered_count >= min_required_answered:
+                            if is_qualified_for_cup:
                                 cup_delta = CUP_1VS1_WIN
                         else:
                             ket_qua_label = "THUA"
                             loai_bien_dong = "THUA_1VS1"
-                            if p.answered_count >= min_required_answered:
+                            if is_qualified_for_cup:
                                 cup_delta = CUP_1VS1_LOSE
                     else:
                         ket_qua_label = f"TOP_{rank_idx}"
                         loai_bien_dong = "GIAI_DAU_NN"
-                        if p.answered_count >= min_required_answered:
+                        if is_qualified_for_cup:
                             cup_delta = CUP_TOURNAMENT_TOP.get(rank_idx, CUP_TOURNAMENT_OTHER)
 
                 cup_truoc = db.execute(
@@ -1288,7 +1235,8 @@ class ArenaRealtimeManager:
         for uid in list(room.players.keys()):
             self.user_room_map.pop(uid, None)
         self.rooms.pop(room.ma_phong, None)
-async def admin_create_tournament_room(
+
+    async def admin_create_tournament_room(
         self,
         admin_id: int,
         ma_chu_de: int,
@@ -1368,41 +1316,41 @@ async def admin_create_tournament_room(
         finally:
             db.close()
 
-async def admin_force_cancel_room(self, ma_phong: int, reason: str = "Quản trị viên đã đóng phòng đấu.") -> bool:
-    """Admin buộc hủy phòng đang chờ hoặc đang thi đấu (đồng bộ cả RAM và SQL Server)"""
-    room = self.rooms.get(ma_phong)
-    if room:
-        if room.shared_timer_task and not room.shared_timer_task.done():
-            room.shared_timer_task.cancel()
-        for p in room.players.values():
-            if p.personal_timer_task and not p.personal_timer_task.done():
-                p.personal_timer_task.cancel()
-            self.user_room_map.pop(p.user_id, None)
-            await self.send_personal(
-                p.user_id,
-                "ROOM_CLOSED",
-                {"MaPhong": ma_phong, "message": reason},
-            )
-        room.status = "DA_HUY"
-        self.rooms.pop(ma_phong, None)
+    async def admin_force_cancel_room(self, ma_phong: int, reason: str = "Quản trị viên đã đóng phòng đấu.") -> bool:
+        """Admin buộc hủy phòng đang chờ hoặc đang thi đấu (đồng bộ cả RAM và SQL Server)"""
+        room = self.rooms.get(ma_phong)
+        if room:
+            if room.shared_timer_task and not room.shared_timer_task.done():
+                room.shared_timer_task.cancel()
+            for p in room.players.values():
+                if p.personal_timer_task and not p.personal_timer_task.done():
+                    p.personal_timer_task.cancel()
+                self.user_room_map.pop(p.user_id, None)
+                await self.send_personal(
+                    p.user_id,
+                    "ROOM_CLOSED",
+                    {"MaPhong": ma_phong, "message": reason},
+                )
+            room.status = "DA_HUY"
+            self.rooms.pop(ma_phong, None)
 
-    db = SessionLocal()
-    try:
-        res = db.execute(
-            text("""
-                UPDATE PhongThiDau
-                SET TrangThai = 'DA_HUY', ThoiGianKetThuc = SYSUTCDATETIME()
-                WHERE MaPhong = :phong AND TrangThai IN ('CHO_NGUOI_CHOI', 'DANG_DIEN_RA')
-            """),
-            {"phong": ma_phong},
-        )
-        db.commit()
-        return res.rowcount > 0 or room is not None
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            res = db.execute(
+                text("""
+                    UPDATE PhongThiDau
+                    SET TrangThai = 'DA_HUY', ThoiGianKetThuc = SYSUTCDATETIME()
+                    WHERE MaPhong = :phong AND TrangThai IN ('CHO_NGUOI_CHOI', 'DANG_DIEN_RA')
+                """),
+                {"phong": ma_phong},
+            )
+            db.commit()
+            return res.rowcount > 0 or room is not None
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
 
 arena_manager = ArenaRealtimeManager()

@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:user/core/constants/api_client.dart';
 import 'package:user/core/constants/api_constants.dart';
 import '../auth/login_screen.dart';
 
@@ -35,37 +36,36 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuthAndNavigate() async {
     final minDelay = Future.delayed(const Duration(seconds: 1));
     Widget nextScreen = const LoginScreen();
-    String? lockNotice;
+    String? noticeMessage;
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && widget.homeScreen != null) {
-        final token = await user.getIdToken();
-        if (token != null) {
-          final response = await http
-              .get(
-                Uri.parse(ApiConstants.getMe),
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': 'Bearer $token',
-                  'ngrok-skip-browser-warning': 'true',
-                },
-              )
-              .timeout(const Duration(seconds: 6));
+      final user = FirebaseAuth.instance.currentUser ??
+          await FirebaseAuth.instance
+              .authStateChanges()
+              .first
+              .timeout(const Duration(seconds: 3), onTimeout: () => null);
 
-          if (response.statusCode == 200) {
-            nextScreen = widget.homeScreen!;
-          } else {
-            try {
-              final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-              if (decoded is Map && decoded['detail'] != null) {
-                lockNotice = decoded['detail'].toString();
-              }
-            } catch (_) {}
-            await FirebaseAuth.instance.signOut();
-          }
+      if (user != null && widget.homeScreen != null) {
+        await user.getIdToken(true);
+        final response = await ApiClient.get(ApiConstants.getMe)
+            .timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          nextScreen = widget.homeScreen!;
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          try {
+            final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+            if (decoded is Map && decoded['detail'] != null) {
+              noticeMessage = decoded['detail'].toString();
+            }
+          } catch (_) {}
+          await FirebaseAuth.instance.signOut();
+        } else {
+          noticeMessage = 'Không thể xác thực tài khoản. Vui lòng đăng nhập lại.';
         }
       }
+    } on TimeoutException {
+      noticeMessage = 'Kết nối máy chủ quá thời gian. Vui lòng thử lại.';
     } catch (_) {
       nextScreen = const LoginScreen();
     }
@@ -81,11 +81,12 @@ class _SplashScreenState extends State<SplashScreen> {
       ),
     );
 
-    if (lockNotice != null && lockNotice.isNotEmpty) {
+    if (noticeMessage != null && noticeMessage.isNotEmpty) {
       messenger?.showSnackBar(
         SnackBar(
-          content: Text(lockNotice),
+          content: Text(noticeMessage),
           backgroundColor: Colors.redAccent,
+          duration: const Duration(seconds: 5),
         ),
       );
     }

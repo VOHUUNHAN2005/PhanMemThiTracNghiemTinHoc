@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:user/core/constants/api_constants.dart';
 import 'package:user/core/services/favorite_review_service.dart';
 import 'package:user/core/services/official_exam_service.dart';
+import 'package:user/features/auth/login_screen.dart';
 import 'package:user/features/history/attempt_detail_screen.dart';
 
 class OfficialExamScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class OfficialExamScreen extends StatefulWidget {
 class _OfficialExamScreenState extends State<OfficialExamScreen>
     with WidgetsBindingObserver {
   static const int _graceSeconds = 5;
+  static const int _maxLeaveWarnings = 3;
 
   static const Map<int, String> _difficultyLabels = {
     1: 'Rất dễ',
@@ -33,8 +36,12 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   bool _isFinalizing = false;
   bool _isCheatLocked = false;
   bool dongY = true;
-  String _violationReason =
-      'Chủ động thoát màn hình thi giữa chừng';
+  String _violationReason = 'Chủ động thoát màn hình thi giữa chừng';
+
+  // Đếm số lần rời/ẩn màn hình thi (3 lần mới đánh gian lận & khóa tài khoản)
+  int _leaveScreenCount = 0;
+  bool _isAwayFromScreen = false;
+  bool _pendingWarningDialog = false;
 
   List<dynamic> _allExams = [];
   Set<int> _favoriteExamIds = {};
@@ -77,11 +84,85 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if ((buoc == 'phongthi' || buoc == 'xacnhan') &&
-        (state == AppLifecycleState.paused ||
-            state == AppLifecycleState.hidden)) {
-      _handleCheatAndLockAccount('Ẩn app / chuyển tab khi thi');
+    // Đóng hẳn app (detached) hoặc mất mạng/tắt nguồn: KHÔNG gọi cheat khóa tài khoản.
+    // Lượt thi đang dở sẽ tự động bị backend đánh dấu hủy khi người dùng mở lại sau.
+    if (state == AppLifecycleState.detached) {
+      return;
     }
+
+    if (buoc != 'phongthi' && buoc != 'xacnhan') {
+      return;
+    }
+
+    // Rời màn hình (kéo thanh thông báo, chuyển app, đa nhiệm, tắt màn hình)
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      if (_isAwayFromScreen || _isFinalizing) return;
+      _isAwayFromScreen = true;
+      _leaveScreenCount += 1;
+
+      if (_leaveScreenCount >= _maxLeaveWarnings) {
+        _handleCheatAndLockAccount('Thoat man hinh thi 3 lan');
+      } else {
+        _pendingWarningDialog = true;
+      }
+      return;
+    }
+
+    // Khi thí sinh quay lại màn hình thi ở lần 1 hoặc lần 2 -> hiện cảnh báo
+    if (state == AppLifecycleState.resumed) {
+      _isAwayFromScreen = false;
+      if (_pendingWarningDialog &&
+          !_isFinalizing &&
+          (buoc == 'phongthi' || buoc == 'xacnhan')) {
+        _pendingWarningDialog = false;
+        _showLeaveWarningDialog(_leaveScreenCount);
+      }
+    }
+  }
+
+  void _showLeaveWarningDialog(int count) {
+    if (!mounted) return;
+    final int remainingChances = _maxLeaveWarnings - count;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Cảnh báo vi phạm ($count/$_maxLeaveWarnings)',
+                style: const TextStyle(
+                  color: Color(0xFFB91C1C),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Bạn vừa rời khỏi màn hình phòng thi (ẩn ứng dụng, chuyển tab hoặc kéo thanh thông báo).\n\n'
+          'Nếu vi phạm thêm $remainingChances lần nữa (đủ $_maxLeaveWarnings lần), bài thi sẽ bị hủy ngay lập tức (0 điểm) và tài khoản của bạn sẽ bị khóa vĩnh viễn.',
+          style: const TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1D5CE5),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Tôi đã hiểu và tiếp tục thi'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleCheatAndLockAccount(String reason) async {
@@ -98,11 +179,16 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       } catch (_) {}
     }
 
+    // Tự động đăng xuất vì tài khoản đã bị khóa
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _isCheatLocked = true;
         _violationReason =
-            'Gian lận (ẩn app / chuyển tab) — Hủy bài & khóa vĩnh viễn tài khoản';
+            'Thoát / ẩn màn hình thi đủ $_maxLeaveWarnings lần — Hủy bài & khóa vĩnh viễn tài khoản';
         buoc = 'bihuy';
       });
     }
@@ -128,8 +214,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
     if (mounted) {
       setState(() {
         _isCheatLocked = false;
-        _violationReason =
-            'Chủ động thoát màn hình thi giữa chừng';
+        _violationReason = 'Chủ động thoát màn hình thi giữa chừng';
         buoc = 'bihuy';
       });
     }
@@ -208,7 +293,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
         isError: false,
       );
     } catch (e) {
-      // Hoàn tác nếu lỗi mạng
       if (mounted) {
         setState(() {
           if (wasFav) {
@@ -315,13 +399,16 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       if (!mounted) return;
       setState(() {
         _maLuotLam = session['MaLuotLam'] as int?;
-        _currentExamTitle = (session['TieuDe'] ?? selected['TieuDe'] ?? '')
-            .toString();
+        _currentExamTitle =
+            (session['TieuDe'] ?? selected['TieuDe'] ?? '').toString();
         _questions = List<dynamic>.from(rawQuestions);
         _userAnswers.clear();
         cauHienTai = 1;
         _isFinalizing = false;
         _isCheatLocked = false;
+        _leaveScreenCount = 0;
+        _isAwayFromScreen = false;
+        _pendingWarningDialog = false;
         _deadlineUtc = deadline;
         _remainingSeconds = remaining;
         _initialSeconds = remaining;
@@ -475,147 +562,163 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   @override
   Widget build(BuildContext context) {
     if (buoc == 'bihuy') {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF4F7FE),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: SizedBox(
-                width: 390,
-                child: Column(
-                  children: [
-                    Container(
-                      width: 110,
-                      height: 110,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFEE2E2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Text(
-                        '!',
-                        style: TextStyle(
-                          color: Color(0xFFB91C1C),
-                          fontSize: 54,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEE2E2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _isCheatLocked
-                            ? 'BÀI THI BỊ HỦY • TÀI KHOẢN BỊ KHÓA VĨNH VIỄN'
-                            : 'BÀI THI BỊ HỦY (HUY_GIAN_LAN)',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFFB91C1C),
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '0 điểm • 0 cúp',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Lý do'),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _violationReason,
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 24),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Bộ đề'),
-                              Flexible(
-                                child: Text(
-                                  _currentExamTitle,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        _isCheatLocked
-                            ? 'Phát hiện hành vi gian lận (ẩn app hoặc chuyển tab tra cứu). Bài thi bị hủy và tài khoản của bạn đã bị khóa vĩnh viễn.'
-                            : 'Bạn đã chủ động thoát màn hình thi giữa chừng. Lượt thi bị hủy ngay lập tức(0 điểm, 0 cúp).',
-                        style: const TextStyle(
-                          color: Color(0xFF475569),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          _fetchExams();
-                          setState(() => buoc = 'danhsach');
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1D5CE5),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
+      return PopScope(
+        canPop: !_isCheatLocked,
+        child: Scaffold(
+          backgroundColor: const Color(0xFFF4F7FE),
+          body: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: SizedBox(
+                  width: 390,
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 110,
+                        height: 110,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
                         ),
                         child: const Text(
-                          'Về danh sách đề thi',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          '!',
+                          style: TextStyle(
+                            color: Color(0xFFB91C1C),
+                            fontSize: 54,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _isCheatLocked
+                              ? 'BÀI THI BỊ HỦY • TÀI KHOẢN BỊ KHÓA VĨNH VIỄN'
+                              : 'BÀI THI BỊ HỦY',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Color(0xFFB91C1C),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '0 điểm • 0 cúp',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Lý do'),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _violationReason,
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Bộ đề'),
+                                Flexible(
+                                  child: Text(
+                                    _currentExamTitle,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          _isCheatLocked
+                              ? 'Bạn đã rời khỏi màn hình thi đủ $_maxLeaveWarnings lần. Hệ thống đánh dấu gian lận, hủy bài thi, khóa vĩnh viễn tài khoản và tự động đăng xuất.'
+                              : 'Bạn đã chủ động thoát màn hình thi giữa chừng. Lượt thi bị hủy ngay lập tức (0 điểm, 0 cúp).',
+                          style: const TextStyle(
+                            color: Color(0xFF475569),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (_isCheatLocked) {
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginScreen(),
+                                ),
+                                (route) => false,
+                              );
+                            } else {
+                              _fetchExams();
+                              setState(() => buoc = 'danhsach');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isCheatLocked
+                                ? const Color(0xFFB91C1C)
+                                : const Color(0xFF1D5CE5),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: Text(
+                            _isCheatLocked
+                                ? 'Về màn hình đăng nhập'
+                                : 'Về danh sách đề thi',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -631,8 +734,8 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       final int tongSoCau =
           ((_submitResult?['TongSoCau'] ?? _questions.length) as num).toInt();
       final int soCauSai = (tongSoCau - soCauDung).clamp(0, tongSoCau);
-      final int cupNhanDuoc = ((_submitResult?['CupNhanDuoc'] ?? 0) as num)
-          .toInt();
+      final int cupNhanDuoc =
+          ((_submitResult?['CupNhanDuoc'] ?? 0) as num).toInt();
       final String trangThai = (_submitResult?['TrangThai'] ?? '').toString();
       final int spentMinutes = ((_initialSeconds - _remainingSeconds) / 60)
           .ceil()
@@ -784,8 +887,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-
-                    // CARD ĐÁNH GIÁ ĐỘ KHÓ (5 MỨC) & GÓP Ý RIÊNG CHO ADMIN
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(18),
@@ -951,7 +1052,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     if (_maLuotLam != null) ...[
                       SizedBox(
                         width: double.infinity,
@@ -1272,6 +1372,27 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                             ),
                           ),
                           const SizedBox(width: 8),
+                          if (_leaveScreenCount > 0) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF3C7),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                'Cảnh báo: $_leaveScreenCount/$_maxLeaveWarnings',
+                                style: const TextStyle(
+                                  color: Color(0xFF92400E),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -1657,7 +1778,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Text(
-                        'Chủ động thoát màn hình thi giữa chừng sẽ hủy lượt thi ngay lập tức (0 điểm, 0 cúp). Ẩn app hoặc chuyển tab sẽ hủy bài và khóa vĩnh viễn tài khoản.',
+                        'Chủ động thoát màn hình thi giữa chừng sẽ hủy lượt thi ngay lập tức (0 điểm, 0 cúp). Rời khỏi màn hình thi (ẩn app / chuyển tab) đủ 3 lần sẽ đánh gian lận, hủy bài và khóa vĩnh viễn tài khoản.',
                         style: TextStyle(
                           color: Color(0xFF92400E),
                           fontWeight: FontWeight.bold,
@@ -1794,12 +1915,12 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                         final bool isFav = _favoriteExamIds.contains(maBoDe);
                         final String title =
                             (exam['TieuDe'] ?? 'Đề thi chính thức').toString();
-                        final String topic = (exam['TenChuDe'] ?? '')
-                            .toString();
-                        final int phut = ((exam['ThoiGianLamBai'] ?? 45) as num)
-                            .toInt();
-                        final int soCau = ((exam['SoLuongCauHoi'] ?? 30) as num)
-                            .toInt();
+                        final String topic =
+                            (exam['TenChuDe'] ?? '').toString();
+                        final int phut =
+                            ((exam['ThoiGianLamBai'] ?? 45) as num).toInt();
+                        final int soCau =
+                            ((exam['SoLuongCauHoi'] ?? 30) as num).toInt();
 
                         return GestureDetector(
                           onTap: () => _openExamRules(exam),

@@ -618,7 +618,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
                                   SizedBox(height: 4),
                                   Text(
                                     '• Bộ đề 50 câu hỏi độc lập (15s Dễ / 20s TB / 30s Khó).\n'
-                                    '• Hoàn thành > 30% (>= 16 câu) để nhận Cúp: Top 1 (+100), Top 2 (+70), Top 3 (+50), Top 4+ (+25).',
+                                    '• Làm đúng > 50% (>= 26/50 câu) mới hợp lệ nhận Cúp: Top 1 (+100), Top 2 (+70), Top 3 (+50), Top 4+ (+25); dưới mức này +0 Cúp.',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Color(0xFF334155),

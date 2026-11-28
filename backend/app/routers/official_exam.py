@@ -16,7 +16,7 @@ NETWORK_GRACE_SECONDS = 5
 
 
 class CheatReportRequest(BaseModel):
-    LyDo: str = Field("Gian lận trong phòng thi", max_length=30)
+    LyDo: str = Field("Thoat man hinh thi 3 lan", max_length=30)
 
 
 def _parse_utc(dt_val) -> datetime:
@@ -219,6 +219,7 @@ def start_official_exam(
             detail="Bạn đã vượt qua đề thi chính thức này rồi, không thể thi lại nữa.",
         )
 
+    # Các lượt thi cũ bị gián đoạn do tắt app / mất mạng / sập nguồn -> chỉ hủy bài, KHÔNG khóa tài khoản
     stale_attempts = db.execute(
         text("""
             SELECT MaLuotLam
@@ -434,6 +435,7 @@ def abort_official_exam(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Thoát phòng thi giữa chừng -> Chỉ hủy lượt thi, KHÔNG khóa tài khoản"""
     me_id = current_user["MaNguoiDung"]
 
     attempt = db.execute(
@@ -474,9 +476,21 @@ def report_official_exam_cheat(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Phát hiện gian lận khi thi chính thức -> Hủy bài & Khóa vĩnh viễn tài khoản"""
+    """Phát hiện gian lận (thoát/ẩn màn hình 3 lần) -> Hủy bài & Khóa vĩnh viễn tài khoản"""
     me_id = current_user["MaNguoiDung"]
-    ly_do = (payload.LyDo or "Gian lận trong phòng thi").strip()[:30]
+    ly_do = (payload.LyDo or "Thoat man hinh thi 3 lan").strip()[:30]
+
+    attempt = db.execute(
+        text("""
+            SELECT MaLuotLam, TrangThai
+            FROM LuotLamBai
+            WHERE MaLuotLam = :ll_id AND MaNguoiDung = :me
+        """),
+        {"ll_id": ma_luot_lam, "me": me_id},
+    ).mappings().first()
+
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Không tìm thấy lượt thi.")
 
     db.execute(
         text("""

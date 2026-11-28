@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:user/features/auth/login_screen.dart';
+import 'package:user/features/home/home_screen.dart';
 import 'package:user/features/splash/splash_screen.dart';
 import 'firebase_options.dart';
 
@@ -25,7 +26,9 @@ class MainApp extends StatelessWidget {
         useMaterial3: true,
         fontFamily: 'Roboto',
       ),
-      home: const SplashScreen(),
+      home: const SplashScreen(
+        homeScreen: HomeScreen(),
+      ),
       routes: {
         '/login': (context) => const LoginScreen(),
       },
