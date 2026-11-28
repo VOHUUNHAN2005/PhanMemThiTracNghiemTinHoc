@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.services.arena_manager import arena_manager
 from security import require_admin
 
 router = APIRouter(
@@ -623,7 +624,9 @@ def list_admin_exams(
                     FROM ChiTietBoDe ct
                     INNER JOIN CauHoi ch ON ct.MaCauHoi = ch.MaCauHoi
                     WHERE ct.MaBoDe = bd.MaBoDe AND ch.MucDo = 'KHO'
-                ) AS SoCauKho
+                ) AS SoCauKho,
+                (SELECT COUNT(*) FROM DanhGiaBoDe dg WHERE dg.MaBoDe = bd.MaBoDe) AS SoDanhGia,
+                (SELECT CAST(AVG(CAST(dg.SoSao AS FLOAT)) AS DECIMAL(3,1)) FROM DanhGiaBoDe dg WHERE dg.MaBoDe = bd.MaBoDe) AS DiemDoKhoTrungBinh
             FROM BoDe bd
             LEFT JOIN ChuDe cd ON bd.MaChuDe = cd.MaChuDe
             WHERE {" AND ".join(conditions)}
@@ -636,6 +639,7 @@ def list_admin_exams(
         {
             **dict(r),
             "DiemDatToiThieu": float(r["DiemDatToiThieu"]),
+            "DiemDoKhoTrungBinh": float(r["DiemDoKhoTrungBinh"]) if r["DiemDoKhoTrungBinh"] is not None else None,
         }
         for r in rows
     ]
@@ -1508,3 +1512,259 @@ def get_attempt_detail(ma_luot_lam: int, db: Session = Depends(get_db)):
         "attempt": attempt_info,
         "questions": question_details,
     }
+DIFFICULTY_MAP_ADMIN = {
+    1: "Rất dễ",
+    2: "Dễ",
+    3: "Trung bình",
+    4: "Khó",
+    5: "Siêu khó",
+}
+
+
+@router.get("/exams/{ma_bo_de}/feedbacks")
+def get_exam_feedbacks_for_admin(ma_bo_de: int, db: Session = Depends(get_db)):
+    """Admin xem toàn bộ đánh giá độ khó và góp ý báo lỗi/sự cố của thí sinh"""
+    exam = db.execute(
+        text("SELECT MaBoDe, TieuDe, LoaiBoDe FROM BoDe WHERE MaBoDe = :id"),
+        {"id": ma_bo_de},
+    ).mappings().first()
+
+    if not exam:
+        raise HTTPException(status_code=404, detail="Không tìm thấy bộ đề.")
+
+    rows = db.execute(
+        text("""
+            SELECT
+                dg.MaDanhGia,
+                dg.MaNguoiDung,
+                u.HoTen,
+                u.TenDangNhap,
+                u.Email,
+                u.AnhDaiDien,
+                dg.SoSao,
+                dg.BinhLuan AS GopY,
+                dg.NgayDanhGia
+            FROM DanhGiaBoDe dg
+            INNER JOIN NguoiDung u ON dg.MaNguoiDung = u.MaNguoiDung
+            WHERE dg.MaBoDe = :bo_de
+            ORDER BY dg.NgayDanhGia DESC, dg.MaDanhGia DESC
+        """),
+        {"bo_de": ma_bo_de},
+    ).mappings().all()
+
+    total_reviews = len(rows)
+    avg_stars = round(sum(r["SoSao"] for r in rows) / total_reviews, 1) if total_reviews > 0 else None
+
+    return {
+        "MaBoDe": exam["MaBoDe"],
+        "TieuDe": exam["TieuDe"],
+        "TongDanhGia": total_reviews,
+        "DiemDoKhoTrungBinh": avg_stars,
+        "items": [
+            {
+                "MaDanhGia": r["MaDanhGia"],
+                "MaNguoiDung": r["MaNguoiDung"],
+                "HoTen": r["HoTen"],
+                "TenDangNhap": r["TenDangNhap"],
+                "Email": r["Email"],
+                "AnhDaiDien": r["AnhDaiDien"],
+                "SoSao": r["SoSao"],
+                "NhanMucDo": DIFFICULTY_MAP_ADMIN.get(r["SoSao"], "Trung bình"),
+                "GopY": r["GopY"],
+                "NgayDanhGia": r["NgayDanhGia"].isoformat() if r["NgayDanhGia"] else None,
+            }
+            for r in rows
+        ],
+    }
+class AdminCreateTournamentRequest(BaseModel):
+    MaChuDe: int
+    SoCauHoi: int = Field(50, ge=5, le=100)
+    MatKhauPhong: Optional[str] = Field(None, max_length=30)
+
+
+class AdminCancelRoomRequest(BaseModel):
+    LyDo: Optional[str] = Field("Quản trị viên đã hủy phòng đấu.", max_length=250)
+
+
+@router.get("/arena/rooms")
+def list_arena_rooms(
+    loai_phong: Optional[str] = Query(None, pattern="^(DOI_KHANG_1VS1|GIAI_DAU_NN)$"),
+    trang_thai: Optional[str] = Query(None, pattern="^(CHO_NGUOI_CHOI|DANG_DIEN_RA|DA_KET_THUC|DA_HUY)$"),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(30, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    summary = db.execute(
+        text("""
+            SELECT
+                COUNT(*) AS TongPhong,
+                ISNULL(SUM(CASE WHEN LoaiPhong = 'DOI_KHANG_1VS1' THEN 1 ELSE 0 END), 0) AS Tong1vs1,
+                ISNULL(SUM(CASE WHEN LoaiPhong = 'GIAI_DAU_NN' THEN 1 ELSE 0 END), 0) AS TongGiaiDau,
+                ISNULL(SUM(CASE WHEN TrangThai IN ('CHO_NGUOI_CHOI', 'DANG_DIEN_RA') THEN 1 ELSE 0 END), 0) AS DangHoatDong
+            FROM PhongThiDau
+        """)
+    ).mappings().first()
+
+    conditions = ["1=1"]
+    params = {}
+    if loai_phong:
+        conditions.append("p.LoaiPhong = :loai")
+        params["loai"] = loai_phong
+    if trang_thai:
+        conditions.append("p.TrangThai = :st")
+        params["st"] = trang_thai
+    if search and search.strip():
+        conditions.append("(p.MaCodePhong LIKE :kw OR u.HoTen LIKE :kw)")
+        params["kw"] = f"%{search.strip()}%"
+
+    where_clause = " AND ".join(conditions)
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(*)
+            FROM PhongThiDau p
+            LEFT JOIN NguoiDung u ON p.MaChuPhong = u.MaNguoiDung
+            WHERE {where_clause}
+        """),
+        params,
+    ).scalar()
+
+    params["offset"] = (page - 1) * limit
+    params["limit"] = limit
+
+    rows = db.execute(
+        text(f"""
+            SELECT
+                p.MaPhong,
+                p.MaCodePhong,
+                p.LoaiPhong,
+                p.CheDoGhep,
+                p.MaChuPhong,
+                u.HoTen AS TenChuPhong,
+                p.MatKhauPhong,
+                p.TrangThai,
+                p.ThoiGianBatDau,
+                p.ThoiGianKetThuc,
+                p.NgayTao,
+                (SELECT COUNT(*) FROM ThanhVienPhongDau tv WHERE tv.MaPhong = p.MaPhong) AS SoNguoiThamGia
+            FROM PhongThiDau p
+            LEFT JOIN NguoiDung u ON p.MaChuPhong = u.MaNguoiDung
+            WHERE {where_clause}
+            ORDER BY p.NgayTao DESC, p.MaPhong DESC
+            OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY
+        """),
+        params,
+    ).mappings().all()
+
+    items = []
+    for r in rows:
+        item = dict(r)
+        rt_room = arena_manager.rooms.get(r["MaPhong"])
+        item["TenChuDe"] = rt_room.ten_chu_de if rt_room else "Chủ đề đấu trường"
+        item["CoMatKhau"] = bool(r["MatKhauPhong"])
+        item["DangTrongRam"] = rt_room is not None
+        if item["ThoiGianBatDau"]:
+            item["ThoiGianBatDau"] = item["ThoiGianBatDau"].isoformat()
+        if item["ThoiGianKetThuc"]:
+            item["ThoiGianKetThuc"] = item["ThoiGianKetThuc"].isoformat()
+        if item["NgayTao"]:
+            item["NgayTao"] = item["NgayTao"].isoformat()
+        items.append(item)
+
+    return {
+        "total": total,
+        "summary": dict(summary) if summary else {},
+        "items": items,
+    }
+
+
+@router.get("/arena/rooms/{ma_phong}")
+def get_arena_room_detail(ma_phong: int, db: Session = Depends(get_db)):
+    room = db.execute(
+        text("""
+            SELECT
+                p.MaPhong, p.MaCodePhong, p.LoaiPhong, p.CheDoGhep,
+                p.MaChuPhong, u.HoTen AS TenChuPhong,
+                p.MatKhauPhong, p.TrangThai,
+                p.ThoiGianBatDau, p.ThoiGianKetThuc, p.NgayTao
+            FROM PhongThiDau p
+            LEFT JOIN NguoiDung u ON p.MaChuPhong = u.MaNguoiDung
+            WHERE p.MaPhong = :phong
+        """),
+        {"phong": ma_phong},
+    ).mappings().first()
+
+    if not room:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phòng thi đấu.")
+
+    members = db.execute(
+        text("""
+            SELECT
+                tv.MaThanhVienPhong,
+                tv.MaNguoiDung,
+                u.HoTen,
+                u.Email,
+                u.AnhDaiDien,
+                tv.TrangThai,
+                tv.SoCauDung,
+                tv.TongThoiGianTraLoiMs,
+                tv.ThuHang,
+                tv.CupThayDoi
+            FROM ThanhVienPhongDau tv
+            INNER JOIN NguoiDung u ON tv.MaNguoiDung = u.MaNguoiDung
+            WHERE tv.MaPhong = :phong
+            ORDER BY
+                CASE WHEN tv.ThuHang IS NULL THEN 999 ELSE tv.ThuHang END ASC,
+                tv.SoCauDung DESC,
+                tv.TongThoiGianTraLoiMs ASC
+        """),
+        {"phong": ma_phong},
+    ).mappings().all()
+
+    room_dict = dict(room)
+    for k in ("ThoiGianBatDau", "ThoiGianKetThuc", "NgayTao"):
+        if room_dict.get(k):
+            room_dict[k] = room_dict[k].isoformat()
+
+    return {
+        "room": room_dict,
+        "members": [dict(m) for m in members],
+    }
+
+
+@router.post("/arena/tournaments", status_code=status.HTTP_201_CREATED)
+async def admin_create_tournament(
+    payload: AdminCreateTournamentRequest,
+    current_admin=Depends(require_admin),
+):
+    admin_id = int(current_admin["MaNguoiDung"]) if isinstance(current_admin, dict) else int(current_admin.MaNguoiDung)
+    try:
+        created = await arena_manager.admin_create_tournament_room(
+            admin_id=admin_id,
+            ma_chu_de=payload.MaChuDe,
+            so_cau_hoi=payload.SoCauHoi,
+            mat_khau_phong=payload.MatKhauPhong,
+        )
+        return {
+            "message": f"Đã tạo phòng Giải đấu thành công! Mã phòng: {created['MaCodePhong']}",
+            "room": created,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Lỗi khi tạo phòng giải đấu: {str(e)}")
+
+
+@router.post("/arena/rooms/{ma_phong}/cancel")
+async def admin_cancel_arena_room(
+    ma_phong: int,
+    payload: AdminCancelRoomRequest,
+):
+    reason = (payload.LyDo or "").strip() or "Quản trị viên đã hủy phòng đấu."
+    ok = await arena_manager.admin_force_cancel_room(ma_phong, reason)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail="Phòng không tồn tại hoặc đã kết thúc / bị hủy trước đó.",
+        )
+    return {"message": "Đã hủy phòng thi đấu và giải phóng thí sinh."}

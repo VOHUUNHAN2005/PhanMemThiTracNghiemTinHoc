@@ -747,7 +747,13 @@ class _ManagePracticeScreenState extends State {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        OutlinedButton.icon(
+                                        IconButton(
+                                          tooltip: 'Soạn câu hỏi',
+                                          icon: const Icon(
+                                            Icons.quiz_outlined,
+                                            size: 20,
+                                            color: Color(0xFF2563EB),
+                                          ),
                                           onPressed: () async {
                                             await Navigator.push(
                                               context,
@@ -759,9 +765,6 @@ class _ManagePracticeScreenState extends State {
                                             );
                                             _loadData();
                                           },
-                                          icon: const Icon(Icons.quiz_outlined,
-                                              size: 16),
-                                          label: const Text('Soạn câu hỏi'),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(

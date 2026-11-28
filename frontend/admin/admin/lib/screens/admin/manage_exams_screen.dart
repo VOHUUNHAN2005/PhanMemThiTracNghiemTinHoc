@@ -44,6 +44,171 @@ class _ManageExamsScreenState extends State {
     }
   }
 
+  Future _openExamFeedbacksDialog(Map exam) async {
+    final int maBoDe = exam['MaBoDe'];
+    Map<String, dynamic>? feedbackData;
+    bool loading = true;
+    bool initialized = false;
+
+    await showModernModal(
+      context: context,
+      title: 'Đánh giá độ khó & Góp ý thí sinh',
+      subtitle: '${exam['TieuDe'] ?? ''}',
+      icon: Icons.rate_review_rounded,
+      accentColor: const Color(0xFFD97706),
+      width: 720,
+      confirmText: 'Đóng',
+      bodyBuilder: (ctx, setModalState) {
+        if (!initialized) {
+          initialized = true;
+          Future.microtask(() async {
+            try {
+              final res = await _api.getExamFeedbacks(maBoDe);
+              setModalState(() {
+                feedbackData = res;
+                loading = false;
+              });
+            } catch (e) {
+              setModalState(() => loading = false);
+              _showSnack(e.toString(), isError: true);
+            }
+          });
+        }
+
+        if (loading) {
+          return const SizedBox(
+            height: 220,
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final items = List.from(feedbackData?['items'] ?? []);
+        final avgDiff = feedbackData?['DiemDoKhoTrungBinh'];
+        final total = feedbackData?['TongDanhGia'] ?? 0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.speed_rounded, color: Color(0xFFD97706)),
+                  const SizedBox(width: 10),
+                  Text(
+                    avgDiff != null
+                        ? 'Độ khó trung bình: $avgDiff / 5.0 ($total lượt đánh giá)'
+                        : 'Chưa có thí sinh nào đánh giá đề thi này.',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF92400E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
+                  child: Text('Chưa có góp ý hoặc báo lỗi nào cho bộ đề này.'),
+                ),
+              )
+            else
+              ...items.map((fb) {
+                final String gopY = (fb['GopY'] ?? '').toString().trim();
+                final int star = (fb['SoSao'] as num?)?.toInt() ?? 3;
+                final String label = (fb['NhanMucDo'] ?? '').toString();
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: gopY.isNotEmpty
+                          ? const Color(0xFFFCA5A5)
+                          : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${fb['HoTen'] ?? 'Thí sinh'} (${fb['Email'] ?? ''})',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Mức $star/5 • $label',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFB45309),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (gopY.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Góp ý / Báo lỗi: $gopY',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 4),
+                        const Text(
+                          '(Chỉ chấm mức độ khó, không kèm nội dung góp ý)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }),
+          ],
+        );
+      },
+      onConfirm: () async => true,
+    );
+  }
+
   void _showSnack(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -740,6 +905,7 @@ class _ManageExamsScreenState extends State {
                               DataColumn(label: Text('Điểm đạt')),
                               DataColumn(label: Text('Trạng thái')),
                               DataColumn(label: Text('Thao tác')),
+                              DataColumn(label: Text('Độ khó & Góp ý')),
                             ],
                             rows: _exams.map((e) {
                               final de = e['SoCauDe'] ?? 0;
@@ -801,7 +967,13 @@ class _ManageExamsScreenState extends State {
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        OutlinedButton.icon(
+                                        IconButton(
+                                          tooltip: 'Soạn câu hỏi',
+                                          icon: const Icon(
+                                            Icons.quiz_outlined,
+                                            size: 20,
+                                            color: Color(0xFF2563EB),
+                                          ),
                                           onPressed: () async {
                                             await Navigator.push(
                                               context,
@@ -813,9 +985,6 @@ class _ManageExamsScreenState extends State {
                                             );
                                             _loadData();
                                           },
-                                          icon: const Icon(Icons.quiz_outlined,
-                                              size: 16),
-                                          label: const Text('Soạn câu hỏi'),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(
@@ -833,6 +1002,22 @@ class _ManageExamsScreenState extends State {
                                               _confirmDeleteExam(e),
                                         ),
                                       ],
+                                    ),
+                                  ),
+                                  DataCell(
+                                    OutlinedButton.icon(
+                                      onPressed: () =>
+                                          _openExamFeedbacksDialog(e),
+                                      icon: const Icon(
+                                          Icons.rate_review_outlined,
+                                          size: 16,
+                                          color: Color(0xFFD97706)),
+                                      label: Text(
+                                        e['DiemDoKhoTrungBinh'] != null
+                                            ? '${e['DiemDoKhoTrungBinh']}/5 (${e['SoDanhGia'] ?? 0})'
+                                            : 'Chưa có (${e['SoDanhGia'] ?? 0})',
+                                        style: const TextStyle(fontSize: 12.5),
+                                      ),
                                     ),
                                   ),
                                 ],

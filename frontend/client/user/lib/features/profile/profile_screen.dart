@@ -795,6 +795,8 @@ class CupHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool hasScroll = historyList.length > 7;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -802,7 +804,11 @@ class CupHistoryCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
-          BoxShadow(color: Colors.blue.withValues(alpha: 0.07), blurRadius: 15, offset: const Offset(0, 5)),
+          BoxShadow(
+            color: Colors.blue.withValues(alpha: 0.07),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
         ],
       ),
       child: Column(
@@ -813,7 +819,11 @@ class CupHistoryCard extends StatelessWidget {
             children: [
               const Text(
                 'Lịch sử biến động cúp',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.darkText),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.darkText,
+                ),
               ),
               GestureDetector(
                 onTap: onViewRules,
@@ -846,15 +856,30 @@ class CupHistoryCard extends StatelessWidget {
               ),
             )
           else
-            ...historyList.map(
-              (item) {
-                final CupHistoryModel history = item as CupHistoryModel;
-                return CupHistoryItem(
-                  title: history.displayTitle,
-                  value: history.formattedValue,
-                  isPositive: history.isPositive,
-                );
-              },
+            ConstrainedBox(
+              // Tối đa 7 hàng (~40px/hàng = 280px), nhiều hơn sẽ cuộn bên trong
+              constraints: const BoxConstraints(maxHeight: 280),
+              child: Scrollbar(
+                thumbVisibility: hasScroll,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  primary: false,
+                  physics: hasScroll
+                      ? const AlwaysScrollableScrollPhysics()
+                      : const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.only(right: hasScroll ? 12 : 0),
+                  itemCount: historyList.length,
+                  itemBuilder: (context, index) {
+                    final CupHistoryModel history =
+                        historyList[index] as CupHistoryModel;
+                    return CupHistoryItem(
+                      title: history.displayTitle,
+                      value: history.formattedValue,
+                      isPositive: history.isPositive,
+                    );
+                  },
+                ),
+              ),
             ),
         ],
       ),

@@ -364,4 +364,106 @@ class AdminApiService {
     );
     return Map.from(_handleResponse(res));
   }
+
+  // =========================================================================
+  // 6. ĐÁNH GIÁ ĐỘ KHÓ & GÓP Ý BÁO LỖI BỘ ĐỀ
+  // =========================================================================
+  Future<Map<String, dynamic>> getExamFeedbacks(int maBoDe) async {
+    final headers = await _getHeaders();
+
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/admin/exams/$maBoDe/feedbacks'),
+      headers: headers,
+    );
+
+    return Map<String, dynamic>.from(_handleResponse(res));
+  }
+
+  // =========================================================================
+  // 7. QUẢN LÝ ĐẤU TRƯỜNG (ĐỐI KHÁNG 1VS1 & GIẢI ĐẤU)
+  // =========================================================================
+  Future<Map<String, dynamic>> getArenaRooms({
+    String? loaiPhong,
+    String? trangThai,
+    String search = '',
+    int page = 1,
+    int limit = 30,
+  }) async {
+    final headers = await _getHeaders();
+
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'limit': limit.toString(),
+    };
+
+    if (loaiPhong != null && loaiPhong.isNotEmpty) {
+      queryParams['loai_phong'] = loaiPhong;
+    }
+
+    if (trangThai != null && trangThai.isNotEmpty) {
+      queryParams['trang_thai'] = trangThai;
+    }
+
+    if (search.trim().isNotEmpty) {
+      queryParams['search'] = search.trim();
+    }
+
+    final uri = Uri.parse('$baseUrl/api/admin/arena/rooms')
+        .replace(queryParameters: queryParams);
+
+    final res = await http.get(uri, headers: headers);
+
+    return Map<String, dynamic>.from(_handleResponse(res));
+  }
+
+  Future<Map<String, dynamic>> getArenaRoomDetail(int maPhong) async {
+    final headers = await _getHeaders();
+
+    final res = await http.get(
+      Uri.parse('$baseUrl/api/admin/arena/rooms/$maPhong'),
+      headers: headers,
+    );
+
+    return Map<String, dynamic>.from(_handleResponse(res));
+  }
+
+  Future<Map<String, dynamic>> createAdminTournament({
+    required int maChuDe,
+    required int soCauHoi,
+    String? matKhauPhong,
+  }) async {
+    final headers = await _getHeaders();
+
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/admin/arena/tournaments'),
+      headers: headers,
+      body: jsonEncode({
+        'MaChuDe': maChuDe,
+        'SoCauHoi': soCauHoi,
+        if (matKhauPhong != null && matKhauPhong.trim().isNotEmpty)
+          'MatKhauPhong': matKhauPhong.trim(),
+      }),
+    );
+
+    return Map<String, dynamic>.from(_handleResponse(res));
+  }
+
+  Future<Map<String, dynamic>> cancelArenaRoom(
+    int maPhong, {
+    String? lyDo,
+  }) async {
+    final headers = await _getHeaders();
+
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/admin/arena/rooms/$maPhong/cancel'),
+      headers: headers,
+      body: jsonEncode({
+        if (lyDo != null && lyDo.trim().isNotEmpty)
+          'LyDo': lyDo.trim(),
+      }),
+    );
+
+    return Map<String, dynamic>.from(_handleResponse(res));
+  }
+
 }

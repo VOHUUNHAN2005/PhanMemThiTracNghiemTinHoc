@@ -6,6 +6,7 @@ import 'manage_topics_screen.dart';
 import 'manage_question_bank_screen.dart';
 import 'manage_practice_screen.dart';
 import 'manage_exams_screen.dart';
+import 'manage_arena_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   final Map adminProfile;
@@ -28,6 +29,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ManageQuestionBankScreen(),
     ManagePracticeScreen(),
     ManageExamsScreen(),
+    ManageArenaScreen(),
   ];
 
   final List<String> _titles = const [
@@ -36,6 +38,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     'Ngân hàng Câu hỏi & Định mức Độ khó',
     'Quản lý Bộ đề Ôn tập (Luyện tập)',
     'Quản lý Đề thi Chính thức',
+    'Quản lý Đấu trường & Giải đấu',
   ];
 
   Future<void> _logout() async {
@@ -129,6 +132,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 selectedIcon: Icon(Icons.assignment),
                 label: Text('Đề thi chính thức'),
               ),
+              NavigationRailDestination(
+                icon: Icon(Icons.emoji_events_outlined),
+                selectedIcon: Icon(Icons.emoji_events),
+                label: Text('Đấu trường & Giải đấu'),
+              ),
             ],
             trailing: Expanded(
               child: Align(
@@ -205,10 +213,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ],
                       ),
                       const SizedBox(width: 12),
-                      CircleAvatar(
+                      const CircleAvatar(
                         radius: 20,
-                        backgroundColor: const Color(0xFFDBEAFE),
-                        backgroundImage: const AssetImage('assets/admin.png'),
+                        backgroundColor: Color(0xFFDBEAFE),
+                        backgroundImage: AssetImage('assets/admin.png'),
                       )
                     ],
                   ),

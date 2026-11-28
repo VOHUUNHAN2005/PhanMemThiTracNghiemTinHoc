@@ -1288,6 +1288,121 @@ class ArenaRealtimeManager:
         for uid in list(room.players.keys()):
             self.user_room_map.pop(uid, None)
         self.rooms.pop(room.ma_phong, None)
+async def admin_create_tournament_room(
+        self,
+        admin_id: int,
+        ma_chu_de: int,
+        so_cau_hoi: int = 50,
+        mat_khau_phong: Optional[str] = None,
+    ) -> dict:
+        """Admin mở phòng Giải đấu sự kiện chính thức (lưu RAM + DB để thí sinh vào bằng mã phòng)"""
+        clean_pwd = mat_khau_phong.strip() if (mat_khau_phong and mat_khau_phong.strip()) else None
+
+        db = SessionLocal()
+        try:
+            ten_chu_de, questions = self._pick_topic_questions(db, ma_chu_de, so_cau_hoi)
+            code = self._generate_room_code(db)
+            q_json_str = json.dumps(
+                [
+                    {
+                        "ThuTuCau": q["ThuTuCau"],
+                        "MaCauHoi": q["MaCauHoi"],
+                        "MucDo": q["MucDo"],
+                        "ThoiGianGiay": q["ThoiGianGiay"],
+                    }
+                    for q in questions
+                ],
+                ensure_ascii=False,
+            )
+
+            ma_phong = db.execute(
+                text("""
+                    INSERT INTO PhongThiDau (
+                        MaCodePhong, LoaiPhong, CheDoGhep, MaChuPhong,
+                        MaBoDe, ThoiGianMoiCau, MatKhauPhong,
+                        DanhSachCauHoiJson, TrangThai
+                    )
+                    OUTPUT INSERTED.MaPhong
+                    VALUES (
+                        :code, 'GIAI_DAU_NN', 'MOI_BAN_BE', :host,
+                        NULL, 15, :pwd,
+                        :qjson, 'CHO_NGUOI_CHOI'
+                    )
+                """),
+                {
+                    "code": code,
+                    "host": admin_id,
+                    "pwd": clean_pwd,
+                    "qjson": q_json_str,
+                },
+            ).scalar()
+            db.commit()
+
+            room = ActiveRoomRuntime(
+                ma_phong=ma_phong,
+                ma_code_phong=code,
+                loai_phong="GIAI_DAU_NN",
+                che_do_ghep="MOI_BAN_BE",
+                ma_chu_phong=admin_id,
+                ma_chu_de=ma_chu_de,
+                ten_chu_de=ten_chu_de,
+                mat_khau_phong=clean_pwd,
+                questions=questions,
+                status="CHO_NGUOI_CHOI",
+            )
+            self.rooms[ma_phong] = room
+
+            return {
+                "MaPhong": ma_phong,
+                "MaCodePhong": code,
+                "LoaiPhong": "GIAI_DAU_NN",
+                "TenChuDe": ten_chu_de,
+                "TongSoCau": len(questions),
+                "CoMatKhau": bool(clean_pwd),
+                "MatKhauPhong": clean_pwd,
+                "TrangThai": "CHO_NGUOI_CHOI",
+            }
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+async def admin_force_cancel_room(self, ma_phong: int, reason: str = "Quản trị viên đã đóng phòng đấu.") -> bool:
+    """Admin buộc hủy phòng đang chờ hoặc đang thi đấu (đồng bộ cả RAM và SQL Server)"""
+    room = self.rooms.get(ma_phong)
+    if room:
+        if room.shared_timer_task and not room.shared_timer_task.done():
+            room.shared_timer_task.cancel()
+        for p in room.players.values():
+            if p.personal_timer_task and not p.personal_timer_task.done():
+                p.personal_timer_task.cancel()
+            self.user_room_map.pop(p.user_id, None)
+            await self.send_personal(
+                p.user_id,
+                "ROOM_CLOSED",
+                {"MaPhong": ma_phong, "message": reason},
+            )
+        room.status = "DA_HUY"
+        self.rooms.pop(ma_phong, None)
+
+    db = SessionLocal()
+    try:
+        res = db.execute(
+            text("""
+                UPDATE PhongThiDau
+                SET TrangThai = 'DA_HUY', ThoiGianKetThuc = SYSUTCDATETIME()
+                WHERE MaPhong = :phong AND TrangThai IN ('CHO_NGUOI_CHOI', 'DANG_DIEN_RA')
+            """),
+            {"phong": ma_phong},
+        )
+        db.commit()
+        return res.rowcount > 0 or room is not None
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 arena_manager = ArenaRealtimeManager()

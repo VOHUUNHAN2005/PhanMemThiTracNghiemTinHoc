@@ -1,15 +1,13 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class ApiConstants {
-  static const bool useNgrok = false;
+  static const bool useNgrok = true;
 
-  // Truyền --dart-define=API_HOST=192.168.x.x khi chạy từ máy khác / điện thoại qua LAN
   static const String _lanHost = String.fromEnvironment(
     'API_HOST',
     defaultValue: '127.0.0.1',
   );
 
-  // Truyền --dart-define=API_PORT=8000 nếu muốn đổi cổng
   static const String _lanPortRaw = String.fromEnvironment(
     'API_PORT',
     defaultValue: '8000',
@@ -17,17 +15,20 @@ class ApiConstants {
 
   static int get _lanPort => int.tryParse(_lanPortRaw) ?? 8000;
 
-  // ignore: unused_field
-  static const String _ngrokHost = 'your-ngrok-domain.ngrok-free.app';
+  static const String _ngrokHost = 'pound-trailside-brim.ngrok-free.dev';
 
-  // Trên Web (Chrome/Edge), nếu không truyền API_HOST riêng thì dùng localhost
   static String get _activeHost {
-    if (kIsWeb && !_lanHost.contains('.')) {
-      return 'localhost';
+    // Android Emulator
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      if (_lanHost == '127.0.0.1') {
+        return '10.0.2.2';
+      }
     }
+
     if (kIsWeb && _lanHost == '127.0.0.1') {
       return 'localhost';
     }
+
     return _lanHost;
   }
 
@@ -51,6 +52,8 @@ class ApiConstants {
   static String get uploadAvatar => '$baseUrl/api/users/upload_avatar';
   static String get syncDevice => '$baseUrl/api/users/device';
   static String get userHistory => '$baseUrl/api/users/me/history';
+  static String attemptDetail(Object maLuotLam) =>
+      '$baseUrl/api/users/me/attempts/$maLuotLam';
   static String get leaderboard => '$baseUrl/api/leaderboard';
   static String get register => '$baseUrl/api/users/register';
   static String get logout => '$baseUrl/api/users/logout';
@@ -128,4 +131,14 @@ class ApiConstants {
 
   static String arenaMatchReview(Object maPhong) =>
       '$baseUrl/api/arena/history/$maPhong/review';
+  // Favorites
+  static String get myFavorites => '$baseUrl/api/favorites/me';
+  static String toggleFavoriteExam(int maBoDe) =>
+      '$baseUrl/api/favorites/exams/$maBoDe/toggle';
+
+  // Official Exam Difficulty Reviews & Feedback
+  static String officialExamReviewSummary(int maBoDe) =>
+      '$baseUrl/api/official/exams/$maBoDe/review-summary';
+  static String submitOfficialExamReview(int maBoDe) =>
+      '$baseUrl/api/official/exams/$maBoDe/review';
 }

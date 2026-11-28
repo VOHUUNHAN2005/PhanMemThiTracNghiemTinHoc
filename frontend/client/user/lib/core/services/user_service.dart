@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:user/core/constants/api_client.dart';
 import 'package:user/core/constants/api_constants.dart';
+import 'package:user/core/models/attempt_history_model.dart';
 import 'package:user/core/models/cup_history_model.dart';
 
 import '../models/user_model.dart';
@@ -72,5 +73,28 @@ class UserService {
       throw err['detail'] ?? 'Không thể tải bảng xếp hạng.';
     }
     return JsonMap.from(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+  Future<List<AttemptHistoryModel>> getAttemptHistory() async {
+    final res = await ApiClient.get(ApiConstants.userHistory);
+    if (res.statusCode != 200) {
+      final err = jsonDecode(utf8.decode(res.bodyBytes));
+      throw err['detail'] ?? 'Không thể tải lịch sử làm bài.';
+    }
+    final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+    final List rawList = decoded['attempts'] ?? [];
+    return rawList
+        .whereType()
+        .map((e) => AttemptHistoryModel.fromJson(JsonMap.from(e)))
+        .toList();
+  }
+
+  Future<AttemptDetailModel> getAttemptDetail(int maLuotLam) async {
+    final res = await ApiClient.get(ApiConstants.attemptDetail(maLuotLam));
+    if (res.statusCode != 200) {
+      final err = jsonDecode(utf8.decode(res.bodyBytes));
+      throw err['detail'] ?? 'Không thể tải chi tiết bài làm.';
+    }
+    final decoded = jsonDecode(utf8.decode(res.bodyBytes));
+    return AttemptDetailModel.fromJson(JsonMap.from(decoded));
   }
 }

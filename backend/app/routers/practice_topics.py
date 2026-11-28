@@ -5,10 +5,14 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from security import get_current_user
 
-router = APIRouter(prefix="/api", tags=["Home & Practice"])
+router = APIRouter(prefix="/api/practice", tags=["Practice Topics"])
 
 
-def _query_topics_by_type(db: Session, me_id: int, loai_bo_de: str):
+@router.get("/topics")
+def get_practice_topics(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
         text("""
             SELECT
@@ -21,7 +25,7 @@ def _query_topics_by_type(db: Session, me_id: int, loai_bo_de: str):
             LEFT JOIN BoDe bd
                 ON cd.MaChuDe = bd.MaChuDe
                AND bd.TrangThai = 'CONG_KHAI'
-               AND bd.LoaiBoDe = :loai
+               AND bd.LoaiBoDe = 'LUYEN_TAP'
             LEFT JOIN LuotLamBai llb
                 ON bd.MaBoDe = llb.MaBoDe
                AND llb.MaNguoiDung = :me
@@ -29,7 +33,7 @@ def _query_topics_by_type(db: Session, me_id: int, loai_bo_de: str):
             GROUP BY cd.MaChuDe, cd.TenChuDe, cd.MoTa
             ORDER BY cd.MaChuDe ASC
         """),
-        {"me": me_id, "loai": loai_bo_de},
+        {"me": current_user["MaNguoiDung"]},
     ).mappings().all()
 
     return [
@@ -44,7 +48,13 @@ def _query_topics_by_type(db: Session, me_id: int, loai_bo_de: str):
     ]
 
 
-def _query_exams_by_topic_and_type(db: Session, me_id: int, ma_chu_de: int, loai_bo_de: str):
+@router.get("/topics/{ma_chu_de}/exams")
+def get_practice_exams_by_topic(
+    ma_chu_de: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    me_id = current_user["MaNguoiDung"]
     topic = db.execute(
         text("SELECT MaChuDe, TenChuDe, MoTa FROM ChuDe WHERE MaChuDe = :id"),
         {"id": ma_chu_de},
@@ -88,10 +98,10 @@ def _query_exams_by_topic_and_type(db: Session, me_id: int, ma_chu_de: int, loai
             FROM BoDe bd
             WHERE bd.MaChuDe = :ma_chu_de
               AND bd.TrangThai = 'CONG_KHAI'
-              AND bd.LoaiBoDe = :loai
+              AND bd.LoaiBoDe = 'LUYEN_TAP'
             ORDER BY bd.MaBoDe ASC
         """),
-        {"ma_chu_de": ma_chu_de, "me": me_id, "loai": loai_bo_de},
+        {"ma_chu_de": ma_chu_de, "me": me_id},
     ).mappings().all()
 
     return {
@@ -117,43 +127,3 @@ def _query_exams_by_topic_and_type(db: Session, me_id: int, ma_chu_de: int, loai
             for r in rows
         ],
     }
-
-
-
-
-
-@router.get("/home/topics")
-def get_home_topics(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return _query_topics_by_type(db, current_user["MaNguoiDung"], "THI_CHINH_THUC")
-
-
-@router.get("/home/topics/{ma_chu_de}/exams")
-def get_home_exams_by_topic(
-    ma_chu_de: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return _query_exams_by_topic_and_type(db, current_user["MaNguoiDung"], ma_chu_de, "THI_CHINH_THUC")
-
-
-
-
-
-@router.get("/practice/topics")
-def get_practice_topics(
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return _query_topics_by_type(db, current_user["MaNguoiDung"], "LUYEN_TAP")
-
-
-@router.get("/practice/topics/{ma_chu_de}/exams")
-def get_practice_exams_by_topic(
-    ma_chu_de: int,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return _query_exams_by_topic_and_type(db, current_user["MaNguoiDung"], ma_chu_de, "LUYEN_TAP")

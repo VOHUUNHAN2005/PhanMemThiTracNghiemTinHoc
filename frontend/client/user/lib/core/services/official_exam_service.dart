@@ -124,7 +124,7 @@ class OfficialExamService {
         cleaned.length > 30 ? cleaned.substring(0, 30) : cleaned;
 
     final response = await ApiClient.post(
-      '/api/official/attempts/$maLuotLam/cheat',
+      '${ApiConstants.baseUrl}/api/official/attempts/$maLuotLam/cheat',
       body: {'LyDo': safeReason},
     );
     final body = _safeDecode(response.bodyBytes);

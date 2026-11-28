@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:user/core/constants/api_constants.dart';
+import 'package:user/core/services/favorite_review_service.dart';
 import 'package:user/core/services/official_exam_service.dart';
+import 'package:user/features/history/attempt_detail_screen.dart';
 
 class OfficialExamScreen extends StatefulWidget {
-  const OfficialExamScreen({super.key});
+  final int? initialExamId;
+  const OfficialExamScreen({super.key, this.initialExamId});
 
   @override
   State<OfficialExamScreen> createState() => _OfficialExamScreenState();
@@ -14,7 +17,16 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
     with WidgetsBindingObserver {
   static const int _graceSeconds = 5;
 
+  static const Map<int, String> _difficultyLabels = {
+    1: 'Rất dễ',
+    2: 'Dễ',
+    3: 'Trung bình',
+    4: 'Khó',
+    5: 'Siêu khó',
+  };
+
   final OfficialExamService _service = OfficialExamService();
+  final FavoriteReviewService _favReviewService = FavoriteReviewService();
 
   String buoc = 'danhsach';
   bool _isLoading = false;
@@ -22,11 +34,18 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   bool _isCheatLocked = false;
   bool dongY = true;
   String _violationReason =
-      'Chủ động thoát màn hình thi giữa chừng (HUY_GIAN_LAN)';
+      'Chủ động thoát màn hình thi giữa chừng';
 
   List<dynamic> _allExams = [];
+  Set<int> _favoriteExamIds = {};
   String _searchKeyword = '';
   Map<String, dynamic>? _selectedExam;
+
+  // Đánh giá độ khó & góp ý
+  Map<String, dynamic>? _reviewSummary;
+  int _selectedDifficultyStar = 3;
+  final TextEditingController _feedbackController = TextEditingController();
+  bool _isSubmittingReview = false;
 
   int? _maLuotLam;
   String _currentExamTitle = '';
@@ -52,6 +71,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
+    _feedbackController.dispose();
     super.dispose();
   }
 
@@ -109,7 +129,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       setState(() {
         _isCheatLocked = false;
         _violationReason =
-            'Chủ động thoát màn hình thi giữa chừng (HUY_GIAN_LAN)';
+            'Chủ động thoát màn hình thi giữa chừng';
         buoc = 'bihuy';
       });
     }
@@ -120,7 +140,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
+        content: Text(msg.replaceFirst('Exception: ', '')),
         backgroundColor: isError ? Colors.red : Colors.green.shade700,
       ),
     );
@@ -129,12 +149,133 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   Future<void> _fetchExams() async {
     setState(() => _isLoading = true);
     try {
-      final list = await _service.getAllOfficialExams();
-      if (mounted) setState(() => _allExams = List<dynamic>.from(list as List));
+      final rawList = await _service.getAllOfficialExams();
+      final list = (rawList as List)
+          .whereType()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      Set<int> favIds = {};
+      try {
+        final favData = await _favReviewService.getMyFavoritesGroupedByTopic();
+        final rawIds = (favData['favorite_exam_ids'] as List?) ?? [];
+        favIds = rawIds.map((e) => (e as num).toInt()).toSet();
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _allExams = list;
+          _favoriteExamIds = favIds;
+          if (widget.initialExamId != null && _selectedExam == null) {
+            final matched = list.where(
+              (e) =>
+                  int.tryParse(e['MaBoDe'].toString()) == widget.initialExamId,
+            );
+            if (matched.isNotEmpty) {
+              final target = matched.first;
+              if (target['DaDat'] == true || target['DaDat'] == 1) {
+                _showSnackBar(
+                  'Bạn đã vượt qua đề thi này rồi, không thể thi lại nữa.',
+                );
+              } else {
+                _openExamRules(target);
+              }
+            }
+          }
+        });
+      }
     } catch (e) {
       _showSnackBar(e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _toggleFavorite(int maBoDe) async {
+    final wasFav = _favoriteExamIds.contains(maBoDe);
+    setState(() {
+      if (wasFav) {
+        _favoriteExamIds.remove(maBoDe);
+      } else {
+        _favoriteExamIds.add(maBoDe);
+      }
+    });
+
+    try {
+      final res = await _favReviewService.toggleFavoriteExam(maBoDe);
+      _showSnackBar(
+        (res['message'] ?? 'Đã cập nhật yêu thích').toString(),
+        isError: false,
+      );
+    } catch (e) {
+      // Hoàn tác nếu lỗi mạng
+      if (mounted) {
+        setState(() {
+          if (wasFav) {
+            _favoriteExamIds.add(maBoDe);
+          } else {
+            _favoriteExamIds.remove(maBoDe);
+          }
+        });
+        _showSnackBar(e.toString());
+      }
+    }
+  }
+
+  Future<void> _loadReviewSummary(int maBoDe) async {
+    try {
+      final summary =
+          await _favReviewService.getOfficialExamReviewSummary(maBoDe);
+      if (mounted) {
+        setState(() {
+          _reviewSummary = summary;
+          final myReview = summary['DanhGiaCuaToi'] as Map<String, dynamic>?;
+          if (myReview != null) {
+            _selectedDifficultyStar =
+                (myReview['SoSao'] as num?)?.toInt() ?? 3;
+            _feedbackController.text = (myReview['GopY'] ?? '').toString();
+          } else {
+            _selectedDifficultyStar = 3;
+            _feedbackController.clear();
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _openExamRules(Map<String, dynamic> exam) {
+    setState(() {
+      _selectedExam = exam;
+      _reviewSummary = null;
+      dongY = true;
+      buoc = 'quydinh';
+    });
+    final maBoDe = (exam['MaBoDe'] as num).toInt();
+    _loadReviewSummary(maBoDe);
+  }
+
+  Future<void> _submitDifficultyReview() async {
+    final selected = _selectedExam;
+    if (selected == null || _isSubmittingReview) return;
+
+    final int maBoDe = (selected['MaBoDe'] as num).toInt();
+    setState(() => _isSubmittingReview = true);
+
+    try {
+      final res = await _favReviewService.submitOfficialExamReview(
+        maBoDe: maBoDe,
+        soSao: _selectedDifficultyStar,
+        gopY: _feedbackController.text,
+      );
+      _showSnackBar(
+        (res['message'] ?? 'Đã gửi đánh giá thành công!').toString(),
+        isError: false,
+      );
+      await _loadReviewSummary(maBoDe);
+    } catch (e) {
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => _isSubmittingReview = false);
     }
   }
 
@@ -151,8 +292,8 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
         ? rawSeconds
         : int.tryParse(rawSeconds?.toString() ?? '') ?? 0;
     return DateTime.now().toUtc().add(
-          Duration(seconds: (seconds > 0 ? seconds : 0) + _graceSeconds),
-        );
+      Duration(seconds: (seconds > 0 ? seconds : 0) + _graceSeconds),
+    );
   }
 
   Future<void> _startExam() async {
@@ -174,8 +315,8 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       if (!mounted) return;
       setState(() {
         _maLuotLam = session['MaLuotLam'] as int?;
-        _currentExamTitle =
-            (session['TieuDe'] ?? selected['TieuDe'] ?? '').toString();
+        _currentExamTitle = (session['TieuDe'] ?? selected['TieuDe'] ?? '')
+            .toString();
         _questions = List<dynamic>.from(rawQuestions);
         _userAnswers.clear();
         cauHienTai = 1;
@@ -214,16 +355,14 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
     });
   }
 
-  Future<void> _toggleAnswer(
-    Map<String, dynamic> question,
-    int maDapAn,
-  ) async {
+  Future<void> _toggleAnswer(Map<String, dynamic> question, int maDapAn) async {
     if (_maLuotLam == null) return;
     final int maCauHoi = question['MaCauHoi'] as int;
     final bool multi = question['ChoPhepNhieuDapAn'] == true;
 
-    final Set<int> currentSet =
-        Set<int>.from(_userAnswers[maCauHoi] ?? const {});
+    final Set<int> currentSet = Set<int>.from(
+      _userAnswers[maCauHoi] ?? const {},
+    );
     if (multi) {
       if (currentSet.contains(maDapAn)) {
         currentSet.remove(maDapAn);
@@ -273,6 +412,9 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
           _submitResult = result;
           buoc = 'ketqua';
         });
+      }
+      if (_selectedExam != null) {
+        await _loadReviewSummary((_selectedExam!['MaBoDe'] as num).toInt());
       }
       if (autoTimeUp) {
         _showSnackBar('Hết giờ! Hệ thống đã tự động nộp bài.', isError: false);
@@ -384,8 +526,10 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                     const SizedBox(height: 8),
                     const Text(
                       '0 điểm • 0 cúp',
-                      style:
-                          TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Container(
@@ -442,7 +586,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                       child: Text(
                         _isCheatLocked
                             ? 'Phát hiện hành vi gian lận (ẩn app hoặc chuyển tab tra cứu). Bài thi bị hủy và tài khoản của bạn đã bị khóa vĩnh viễn.'
-                            : 'Bạn đã chủ động thoát màn hình thi giữa chừng. Lượt thi bị hủy ngay lập tức với trạng thái HUY_GIAN_LAN (0 điểm, 0 cúp).',
+                            : 'Bạn đã chủ động thoát màn hình thi giữa chừng. Lượt thi bị hủy ngay lập tức(0 điểm, 0 cúp).',
                         style: const TextStyle(
                           color: Color(0xFF475569),
                           fontSize: 13,
@@ -482,17 +626,18 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
 
     if (buoc == 'ketqua') {
       final bool daDat = _submitResult?['DaDat'] == true;
-      final double diemSo =
-          ((_submitResult?['DiemSo'] ?? 0) as num).toDouble();
+      final double diemSo = ((_submitResult?['DiemSo'] ?? 0) as num).toDouble();
       final int soCauDung = ((_submitResult?['SoCauDung'] ?? 0) as num).toInt();
       final int tongSoCau =
           ((_submitResult?['TongSoCau'] ?? _questions.length) as num).toInt();
       final int soCauSai = (tongSoCau - soCauDung).clamp(0, tongSoCau);
-      final int cupNhanDuoc =
-          ((_submitResult?['CupNhanDuoc'] ?? 0) as num).toInt();
+      final int cupNhanDuoc = ((_submitResult?['CupNhanDuoc'] ?? 0) as num)
+          .toInt();
       final String trangThai = (_submitResult?['TrangThai'] ?? '').toString();
-      final int spentMinutes =
-          ((_initialSeconds - _remainingSeconds) / 60).ceil().clamp(1, 999);
+      final int spentMinutes = ((_initialSeconds - _remainingSeconds) / 60)
+          .ceil()
+          .clamp(1, 999);
+      final bool alreadyReviewed = _reviewSummary?['DanhGiaCuaToi'] != null;
 
       return Scaffold(
         backgroundColor: const Color(0xFFF4F7FE),
@@ -638,7 +783,207 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                         ],
                       ),
                     ),
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 16),
+
+                    // CARD ĐÁNH GIÁ ĐỘ KHÓ (5 MỨC) & GÓP Ý RIÊNG CHO ADMIN
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: const Color(0xFFDBEAFE),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.speed_rounded,
+                                color: Color(0xFF1D5CE5),
+                                size: 22,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Đánh giá độ khó & Góp ý đề thi',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Mức độ khó được tính trung bình cho đề thi. Nội dung góp ý chỉ hiển thị riêng cho Quản trị viên.',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: List.generate(5, (i) {
+                              final int level = i + 1;
+                              final bool selected =
+                                  _selectedDifficultyStar == level;
+                              return Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(
+                                    () => _selectedDifficultyStar = level,
+                                  ),
+                                  child: Container(
+                                    margin: EdgeInsets.only(
+                                      right: i < 4 ? 6 : 0,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10,
+                                      horizontal: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? const Color(0xFF1D5CE5)
+                                          : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          '$level',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                            color: selected
+                                                ? Colors.white
+                                                : const Color(0xFF0F172A),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _difficultyLabels[level]!,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: selected
+                                                ? Colors.white
+                                                : const Color(0xFF475569),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _feedbackController,
+                            maxLines: 3,
+                            maxLength: 500,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Báo lỗi câu hỏi, sai đáp án hoặc sự cố kỹ thuật cho Admin (không bắt buộc)...',
+                              hintStyle: const TextStyle(fontSize: 13),
+                              filled: true,
+                              fillColor: const Color(0xFFF8FAFC),
+                              counterText: '',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: ElevatedButton.icon(
+                              onPressed: _isSubmittingReview
+                                  ? null
+                                  : _submitDifficultyReview,
+                              icon: _isSubmittingReview
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.send_rounded, size: 18),
+                              label: Text(
+                                alreadyReviewed
+                                    ? 'Cập nhật đánh giá & góp ý'
+                                    : 'Gửi đánh giá & góp ý',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0F172A),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_maLuotLam != null) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AttemptDetailScreen(
+                                  maLuotLam: _maLuotLam!,
+                                  fallbackTitle: _currentExamTitle,
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.fact_check_outlined),
+                          label: const Text(
+                            'Xem chi tiết bài làm',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF1D5CE5),
+                            side: const BorderSide(color: Color(0xFF1D5CE5)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       height: 48,
@@ -1009,12 +1354,14 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                       ),
                       const SizedBox(height: 12),
                       ...List.generate(answers.length, (idx) {
-                        final ans =
-                            Map<String, dynamic>.from(answers[idx] as Map);
+                        final ans = Map<String, dynamic>.from(
+                          answers[idx] as Map,
+                        );
                         final int maDapAn = ans['MaDapAn'] as int;
                         final bool isSelected = selectedSet.contains(maDapAn);
-                        final String prefix =
-                            idx < labels.length ? '${labels[idx]}. ' : '';
+                        final String prefix = idx < labels.length
+                            ? '${labels[idx]}. '
+                            : '';
 
                         return GestureDetector(
                           onTap: () => _toggleAnswer(currentQ, maDapAn),
@@ -1070,8 +1417,9 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                                 );
                                 final int qId = q['MaCauHoi'] as int;
                                 final bool dangChon = soCau == cauHienTai;
-                                final bool daLam =
-                                    _userAnswers.containsKey(qId);
+                                final bool daLam = _userAnswers.containsKey(
+                                  qId,
+                                );
 
                                 return GestureDetector(
                                   onTap: () =>
@@ -1084,8 +1432,8 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                                       color: dangChon
                                           ? const Color(0xFF1D5CE5)
                                           : (daLam
-                                              ? const Color(0xFFDBEAFE)
-                                              : const Color(0xFFF1F5F9)),
+                                                ? const Color(0xFFDBEAFE)
+                                                : const Color(0xFFF1F5F9)),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Text(
@@ -1096,8 +1444,8 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                                         color: dangChon
                                             ? Colors.white
                                             : (daLam
-                                                ? const Color(0xFF1D5CE5)
-                                                : Colors.black54),
+                                                  ? const Color(0xFF1D5CE5)
+                                                  : Colors.black54),
                                       ),
                                     ),
                                   ),
@@ -1137,11 +1485,11 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                           SizedBox(
                             height: 48,
                             child: OutlinedButton(
-                              onPressed: () =>
-                                  setState(() => buoc = 'xacnhan'),
+                              onPressed: () => setState(() => buoc = 'xacnhan'),
                               style: OutlinedButton.styleFrom(
-                                side:
-                                    const BorderSide(color: Color(0xFF1D5CE5)),
+                                side: const BorderSide(
+                                  color: Color(0xFF1D5CE5),
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -1166,10 +1514,20 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
 
     if (buoc == 'quydinh' && _selectedExam != null) {
       final exam = _selectedExam!;
+      final int maBoDe = (exam['MaBoDe'] as num).toInt();
+      final bool isFav = _favoriteExamIds.contains(maBoDe);
       final int phut = ((exam['ThoiGianLamBai'] ?? 45) as num).toInt();
       final int soCau = ((exam['SoLuongCauHoi'] ?? 30) as num).toInt();
-      final String diemSan =
-          (exam['DiemDatToiThieu'] ?? 5.0).toString().replaceAll('.', ',');
+      final String diemSan = (exam['DiemDatToiThieu'] ?? 5.0)
+          .toString()
+          .replaceAll('.', ',');
+
+      final double? avgDiff =
+          (_reviewSummary?['DiemDoKhoTrungBinh'] as num?)?.toDouble();
+      final String? diffLabel =
+          _reviewSummary?['NhanDoKhoTrungBinh']?.toString();
+      final int totalReviews =
+          (_reviewSummary?['TongLuotDanhGia'] as num?)?.toInt() ?? 0;
 
       return Scaffold(
         backgroundColor: const Color(0xFFF4F7FE),
@@ -1190,11 +1548,25 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                               ? null
                               : () => setState(() => buoc = 'danhsach'),
                         ),
-                        const Text(
-                          'Quy định trước khi thi',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
+                        const Expanded(
+                          child: Text(
+                            'Quy định trước khi thi',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: isFav ? 'Bỏ yêu thích' : 'Thêm yêu thích',
+                          onPressed: () => _toggleFavorite(maBoDe),
+                          icon: Icon(
+                            isFav
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            color: isFav
+                                ? const Color(0xFFE11D48)
+                                : const Color(0xFF64748B),
                           ),
                         ),
                       ],
@@ -1255,6 +1627,24 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                               ),
                             ],
                           ),
+                          const Divider(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Độ khó đánh giá'),
+                              Text(
+                                avgDiff != null && diffLabel != null
+                                    ? '$avgDiff/5 • $diffLabel ($totalReviews)'
+                                    : 'Chưa có đánh giá',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: avgDiff != null
+                                      ? const Color(0xFFD97706)
+                                      : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -1267,7 +1657,7 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Text(
-                        'Chủ động thoát màn hình thi giữa chừng sẽ hủy lượt thi ngay lập tức (HUY_GIAN_LAN, 0 điểm, 0 cúp). Ẩn app hoặc chuyển tab sẽ hủy bài và khóa vĩnh viễn tài khoản.',
+                        'Chủ động thoát màn hình thi giữa chừng sẽ hủy lượt thi ngay lập tức (0 điểm, 0 cúp). Ẩn app hoặc chuyển tab sẽ hủy bài và khóa vĩnh viễn tài khoản.',
                         style: TextStyle(
                           color: Color(0xFF92400E),
                           fontWeight: FontWeight.bold,
@@ -1399,23 +1789,20 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                       )
                     else
                       ...filteredExams.map((rawExam) {
-                        final exam =
-                            Map<String, dynamic>.from(rawExam as Map);
+                        final exam = Map<String, dynamic>.from(rawExam as Map);
+                        final int maBoDe = (exam['MaBoDe'] as num).toInt();
+                        final bool isFav = _favoriteExamIds.contains(maBoDe);
                         final String title =
                             (exam['TieuDe'] ?? 'Đề thi chính thức').toString();
-                        final String topic =
-                            (exam['TenChuDe'] ?? '').toString();
-                        final int phut =
-                            ((exam['ThoiGianLamBai'] ?? 45) as num).toInt();
-                        final int soCau =
-                            ((exam['SoLuongCauHoi'] ?? 30) as num).toInt();
+                        final String topic = (exam['TenChuDe'] ?? '')
+                            .toString();
+                        final int phut = ((exam['ThoiGianLamBai'] ?? 45) as num)
+                            .toInt();
+                        final int soCau = ((exam['SoLuongCauHoi'] ?? 30) as num)
+                            .toInt();
 
                         return GestureDetector(
-                          onTap: () => setState(() {
-                            _selectedExam = exam;
-                            dongY = true;
-                            buoc = 'quydinh';
-                          }),
+                          onTap: () => _openExamRules(exam),
                           child: Container(
                             width: double.infinity,
                             margin: const EdgeInsets.only(bottom: 12),
@@ -1458,6 +1845,20 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
                                         ),
                                       ),
                                     ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: isFav
+                                      ? 'Bỏ yêu thích'
+                                      : 'Thêm yêu thích',
+                                  onPressed: () => _toggleFavorite(maBoDe),
+                                  icon: Icon(
+                                    isFav
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded,
+                                    color: isFav
+                                        ? const Color(0xFFE11D48)
+                                        : const Color(0xFF94A3B8),
                                   ),
                                 ),
                                 const Icon(

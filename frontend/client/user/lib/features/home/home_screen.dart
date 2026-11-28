@@ -4,10 +4,13 @@ import 'package:user/core/services/friend_service.dart';
 import 'package:user/core/services/user_service.dart';
 import 'package:user/core/shared/widgets/bottom_menu.dart';
 import 'package:user/features/friends/friends_screen.dart';
+import 'package:user/features/history/attempt_history_screen.dart';
 import 'package:user/features/home/official_exam_screen.dart';
 import 'package:user/features/practice/practice_screen.dart';
 import 'package:user/features/profile/profile_screen.dart';
 import 'package:user/features/arena/arena_lobby_screen.dart';
+import 'package:user/core/services/favorite_review_service.dart';
+import 'package:user/features/favorites/favorite_exams_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +22,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final UserService _userService = UserService();
   final FriendService _friendService = FriendService();
-
+  final FavoriteReviewService _favoriteService = FavoriteReviewService();
+  int _favoriteCount = 0;
   int _tabIndex = 0;
   UserModel? _profile;
   int _pendingRequestsCount = 0;
@@ -86,6 +90,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final incoming = reqData['incoming'] as List? ?? [];
       if (mounted) {
         setState(() => _pendingRequestsCount = incoming.length);
+      }
+    } catch (_) {}
+    try {
+      final favData = await _favoriteService.getMyFavoritesGroupedByTopic();
+      if (mounted) {
+        setState(() {
+          _favoriteCount = (favData['total_favorites'] as num?)?.toInt() ?? 0;
+        });
       }
     } catch (_) {}
   }
@@ -239,8 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: const Color(0xFF1D5CE5),
                               backgroundImage:
                                   (avatarUrl != null && avatarUrl.isNotEmpty)
-                                      ? NetworkImage(avatarUrl)
-                                      : null,
+                                  ? NetworkImage(avatarUrl)
+                                  : null,
                               child: (avatarUrl == null || avatarUrl.isEmpty)
                                   ? Text(
                                       _getInitials(hoTen),
@@ -471,6 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 390,
                   child: Column(
                     children: [
+                      // Hàng 1: Ôn tập | Thi chính thức
                       Row(
                         children: [
                           Expanded(
@@ -505,8 +518,33 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
+                      // Hàng 2: Bộ đề yêu thích (nằm trước) | Thi đấu trực tuyến
                       Row(
                         children: [
+                          Expanded(
+                            child: _buildFeatureCard(
+                              icon: Icons.favorite_rounded,
+                              iconBg: const Color(0xFFE11D48),
+                              title: 'Bộ đề yêu thích',
+                              subtitle: _favoriteCount > 0
+                                  ? '$_favoriteCount bộ đề đã lưu'
+                                  : 'Nhóm theo chủ đề',
+                              subtitleColor: const Color(0xFFE11D48),
+                              onTap: () async {
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FavoriteExamsScreen(
+                                      onOpenPracticeTab: () =>
+                                          setState(() => _tabIndex = 1),
+                                    ),
+                                  ),
+                                );
+                                _loadDashboardData();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 14),
                           Expanded(
                             child: _buildFeatureCard(
                               icon: Icons.sports_esports_rounded,
@@ -517,20 +555,27 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () => setState(() => _tabIndex = 2),
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: _buildFeatureCard(
-                              icon: Icons.bar_chart_rounded,
-                              iconBg: const Color(0xFF16A34A),
-                              title: 'Lịch sử & BXH',
-                              subtitle: 'Kết quả, thứ hạng',
-                              subtitleColor: const Color(0xFF64748B),
-                              onTap: () => setState(() => _tabIndex = 4),
-                            ),
-                          ),
                         ],
                       ),
+                      const SizedBox(height: 14),
+                      // Hàng 3: Lịch sử & BXH
+                      _buildFeatureCard(
+                        icon: Icons.bar_chart_rounded,
+                        iconBg: const Color(0xFF16A34A),
+                        title: 'Lịch sử & BXH',
+                        subtitle: 'Kết quả làm bài, biến động cúp & thứ hạng',
+                        subtitleColor: const Color(0xFF64748B),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AttemptHistoryScreen(),
+                            ),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 16),
+                      // Banner Quản lý bạn bè
                       GestureDetector(
                         onTap: () => setState(() => _tabIndex = 3),
                         child: Container(
