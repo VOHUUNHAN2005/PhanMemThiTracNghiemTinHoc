@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:user/core/constants/api_client.dart';
 import 'package:user/core/constants/api_constants.dart';
@@ -28,7 +27,6 @@ class FavoriteReviewService {
     return fallback;
   }
 
-  /// Lấy danh sách bộ đề yêu thích gom nhóm theo Chủ đề
   Future<Map<String, dynamic>> getMyFavoritesGroupedByTopic() async {
     final res = await ApiClient.get(ApiConstants.myFavorites);
     final body = _safeDecode(res.bodyBytes);
@@ -39,16 +37,11 @@ class FavoriteReviewService {
       );
     }
 
-    return body is Map
-        ? Map<String, dynamic>.from(body)
-        : <String, dynamic>{};
+    return body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{};
   }
 
-  /// Bật / tắt yêu thích bộ đề
   Future<Map<String, dynamic>> toggleFavoriteExam(int maBoDe) async {
-    final res = await ApiClient.post(
-      ApiConstants.toggleFavoriteExam(maBoDe),
-    );
+    final res = await ApiClient.post(ApiConstants.toggleFavoriteExam(maBoDe));
 
     final body = _safeDecode(res.bodyBytes);
 
@@ -58,15 +51,10 @@ class FavoriteReviewService {
       );
     }
 
-    return body is Map
-        ? Map<String, dynamic>.from(body)
-        : <String, dynamic>{};
+    return body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{};
   }
 
-  /// Lấy thông tin độ khó trung bình & đánh giá của user
-  Future<Map<String, dynamic>> getOfficialExamReviewSummary(
-    int maBoDe,
-  ) async {
+  Future<Map<String, dynamic>> getOfficialExamReviewSummary(int maBoDe) async {
     final res = await ApiClient.get(
       ApiConstants.officialExamReviewSummary(maBoDe),
     );
@@ -79,12 +67,9 @@ class FavoriteReviewService {
       );
     }
 
-    return body is Map
-        ? Map<String, dynamic>.from(body)
-        : <String, dynamic>{};
+    return body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{};
   }
 
-  /// Gửi hoặc cập nhật đánh giá độ khó
   Future<Map<String, dynamic>> submitOfficialExamReview({
     required int maBoDe,
     required int soSao,
@@ -94,21 +79,16 @@ class FavoriteReviewService {
       ApiConstants.submitOfficialExamReview(maBoDe),
       body: {
         'SoSao': soSao,
-        if (gopY != null && gopY.trim().isNotEmpty)
-          'BinhLuan': gopY.trim(),
+        if (gopY != null && gopY.trim().isNotEmpty) 'BinhLuan': gopY.trim(),
       },
     );
 
     final body = _safeDecode(res.bodyBytes);
 
     if (res.statusCode != 200 && res.statusCode != 201) {
-      throw Exception(
-        _extractError(body, 'Không thể gửi đánh giá và góp ý.'),
-      );
+      throw Exception(_extractError(body, 'Không thể gửi đánh giá và góp ý.'));
     }
 
-    return body is Map
-        ? Map<String, dynamic>.from(body)
-        : <String, dynamic>{};
+    return body is Map ? Map<String, dynamic>.from(body) : <String, dynamic>{};
   }
 }

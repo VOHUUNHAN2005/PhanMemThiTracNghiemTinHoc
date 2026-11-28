@@ -17,7 +17,6 @@ class AuthService {
       password: password,
     );
 
-    // Đảm bảo ID token mới đã sẵn sàng trước khi gọi API backend ở nhịp đầu
     await cred.user?.getIdToken(true);
 
     final res = await ApiClient.get(ApiConstants.getMe);
@@ -36,7 +35,6 @@ class AuthService {
 
     final userData = jsonDecode(utf8.decode(res.bodyBytes));
 
-    // Đồng bộ thiết bị (không chặn luồng nếu lỗi phụ)
     try {
       await ApiClient.post(
         ApiConstants.syncDevice,
@@ -47,7 +45,6 @@ class AuthService {
     return UserModel.fromJson(userData);
   }
 
-  /// Đăng ký tài khoản Firebase + Lưu xuống SQL Server
   Future<void> register({
     required String email,
     required String password,
@@ -63,14 +60,10 @@ class AuthService {
 
     final res = await ApiClient.post(
       ApiConstants.register,
-      body: {
-        'HoTen': hoTen.trim(),
-        'TenDangNhap': tenDangNhap.trim(),
-      },
+      body: {'HoTen': hoTen.trim(), 'TenDangNhap': tenDangNhap.trim()},
     );
 
     if (res.statusCode != 201) {
-      // Rollback user Firebase nếu lưu SQL Server thất bại (ví dụ trùng username)
       await cred.user?.delete();
       String detailMessage = 'Đăng ký thất bại.';
       try {
@@ -83,12 +76,10 @@ class AuthService {
     }
   }
 
-  /// Gửi email khôi phục mật khẩu
   Future<void> sendPasswordReset(String email) async {
     await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
-  /// Đổi mật khẩu khi đang đăng nhập
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -105,7 +96,6 @@ class AuthService {
     await user.updatePassword(newPassword);
   }
 
-  /// Đăng xuất hệ thống & cập nhật TrangThaiOnline = 0
   Future<void> logout() async {
     try {
       await ApiClient.post(ApiConstants.logout);

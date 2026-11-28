@@ -39,9 +39,6 @@ class AdminApiService {
     throw 'Lỗi máy chủ (${response.statusCode}).';
   }
 
-  // =========================================================================
-  // 1. TÀI KHOẢN & PHÂN QUYỀN
-  // =========================================================================
   Future getMyProfile() async {
     final headers = await _getHeaders();
     final res = await http.get(
@@ -56,7 +53,8 @@ class AdminApiService {
     String? role,
     String? accountStatus,
     int page = 1,
-    int limit = 20, String? trangThai,
+    int limit = 20,
+    String? trangThai,
   }) async {
     final headers = await _getHeaders();
     final queryParams = {
@@ -70,12 +68,14 @@ class AdminApiService {
       queryParams['account_status'] = accountStatus;
     }
 
-    final uri = Uri.parse('$baseUrl/api/admin/users').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$baseUrl/api/admin/users')
+        .replace(queryParameters: queryParams);
     final res = await http.get(uri, headers: headers);
     return Map.from(_handleResponse(res));
   }
 
-  Future updateUserStatus(user, {
+  Future updateUserStatus(
+    user, {
     required int userId,
     required String status,
     String? lyDoKhoa,
@@ -109,9 +109,6 @@ class AdminApiService {
     _handleResponse(res);
   }
 
-  // =========================================================================
-  // 2. CHỦ ĐỀ (TOPICS)
-  // =========================================================================
   Future getTopics() async {
     final headers = await _getHeaders();
     final res = await http.get(
@@ -154,9 +151,6 @@ class AdminApiService {
     _handleResponse(res);
   }
 
-  // =========================================================================
-  // 3. NGÂN HÀNG CÂU HỎI ĐỘC LẬP (QUESTION BANK)
-  // =========================================================================
   Future getQuestions({
     int? maChuDe,
     String? mucDo,
@@ -172,10 +166,12 @@ class AdminApiService {
     };
     if (maChuDe != null) queryParams['ma_chu_de'] = maChuDe.toString();
     if (mucDo != null && mucDo.isNotEmpty) queryParams['muc_do'] = mucDo;
-    if (trangThai != null && trangThai.isNotEmpty) queryParams['trang_thai'] = trangThai;
+    if (trangThai != null && trangThai.isNotEmpty)
+      queryParams['trang_thai'] = trangThai;
     if (search.trim().isNotEmpty) queryParams['search'] = search.trim();
 
-    final uri = Uri.parse('$baseUrl/api/admin/questions').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$baseUrl/api/admin/questions')
+        .replace(queryParameters: queryParams);
     final res = await http.get(uri, headers: headers);
     return Map.from(_handleResponse(res));
   }
@@ -199,9 +195,6 @@ class AdminApiService {
     _handleResponse(res);
   }
 
-  // =========================================================================
-  // 4. BỘ ĐỀ ÔN & ĐỀ THI CHÍNH THỨC + SINH ĐỀ TỰ ĐỘNG
-  // =========================================================================
   Future getExams({
     String? loaiBoDe,
     int? maChuDe,
@@ -257,9 +250,6 @@ class AdminApiService {
     _handleResponse(res);
   }
 
-  // =========================================================================
-  // 5. CÂU HỎI & ĐÁP ÁN TRONG BỘ ĐỀ
-  // =========================================================================
   Future getQuestionTypes() async {
     final headers = await _getHeaders();
     final res = await http.get(
@@ -338,6 +328,7 @@ class AdminApiService {
     final data = _handleResponse(res);
     return data['HinhAnhUrl'] as String;
   }
+
   Future attachQuestionsToExam(int maBoDe, List<int> maCauHoiList) async {
     final headers = await _getHeaders();
     final res = await http.post(
@@ -347,6 +338,7 @@ class AdminApiService {
     );
     return Map.from(_handleResponse(res));
   }
+
   Future getUserActivityHistory(int userId) async {
     final headers = await _getHeaders();
     final res = await http.get(
@@ -365,9 +357,6 @@ class AdminApiService {
     return Map.from(_handleResponse(res));
   }
 
-  // =========================================================================
-  // 6. ĐÁNH GIÁ ĐỘ KHÓ & GÓP Ý BÁO LỖI BỘ ĐỀ
-  // =========================================================================
   Future<Map<String, dynamic>> getExamFeedbacks(int maBoDe) async {
     final headers = await _getHeaders();
 
@@ -379,9 +368,6 @@ class AdminApiService {
     return Map<String, dynamic>.from(_handleResponse(res));
   }
 
-  // =========================================================================
-  // 7. QUẢN LÝ ĐẤU TRƯỜNG (ĐỐI KHÁNG 1VS1 & GIẢI ĐẤU)
-  // =========================================================================
   Future<Map<String, dynamic>> getArenaRooms({
     String? loaiPhong,
     String? trangThai,
@@ -458,12 +444,10 @@ class AdminApiService {
       Uri.parse('$baseUrl/api/admin/arena/rooms/$maPhong/cancel'),
       headers: headers,
       body: jsonEncode({
-        if (lyDo != null && lyDo.trim().isNotEmpty)
-          'LyDo': lyDo.trim(),
+        if (lyDo != null && lyDo.trim().isNotEmpty) 'LyDo': lyDo.trim(),
       }),
     );
 
     return Map<String, dynamic>.from(_handleResponse(res));
   }
-
 }

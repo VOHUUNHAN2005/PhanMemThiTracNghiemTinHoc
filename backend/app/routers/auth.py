@@ -8,14 +8,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from security import get_current_user
-from app.schemas.user import DeviceSyncRequest, UserUpdateProfile
+from app.schemas.user import DeviceSyncRequest, UserRegisterRequest, UserUpdateProfile
+from app.services.arena_manager import arena_manager
+from security import get_current_user, verify_firebase_token
 
 router = APIRouter(prefix="/api/users", tags=["Auth & Users"])
-
-from security import get_current_user, verify_firebase_token
-from app.schemas.user import DeviceSyncRequest, UserUpdateProfile, UserRegisterRequest
-
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -68,6 +65,8 @@ def upload_avatar(
         "message": "Cập nhật ảnh đại diện thành công!",
         "AnhDaiDien": avatar_url,
     }
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_user(
     payload: UserRegisterRequest,
@@ -136,6 +135,8 @@ def register_user(
         )
 
     return {"message": "Đăng ký tài khoản thành công!"}
+
+
 @router.get("/get_me")
 def get_my_profile(current_user: dict = Depends(get_current_user)):
     return {
@@ -152,6 +153,7 @@ def get_my_profile(current_user: dict = Depends(get_current_user)):
         "TrangThaiOnline": current_user["TrangThaiOnline"],
         "TrangThaiTaiKhoan": current_user["TrangThaiTaiKhoan"],
     }
+
 
 @router.put("/update_me")
 def update_my_profile(
@@ -186,25 +188,52 @@ def update_my_profile(
 
 
 @router.post("/device")
-def sync_device_and_push_token(
+async def sync_device_and_push_token(
     payload: DeviceSyncRequest,
-    current_user: dict = Depends(get_current_user),
+    token_data: dict = Depends(verify_firebase_token),
     db: Session = Depends(get_db),
 ):
+    firebase_uid = token_data.get("uid")
+    user = db.execute(
+        text("SELECT MaNguoiDung, MaThietBiHienTai FROM NguoiDung WHERE FirebaseUid = :uid"),
+        {"uid": firebase_uid},
+    ).mappings().first()
+
+    if not user:
+        return {"message": "Chưa đồng bộ hồ sơ người dùng."}
+
+    new_device = payload.MaThietBiHienTai.strip() if payload.MaThietBiHienTai else None
+    old_device = (user.get("MaThietBiHienTai") or "").strip()
+
     db.execute(
         text("""
             UPDATE NguoiDung
             SET MaThietBiHienTai = COALESCE(:device, MaThietBiHienTai),
-                PushToken = COALESCE(:push_token, PushToken)
+                PushToken = COALESCE(:push_token, PushToken),
+                TrangThaiOnline = 1,
+                HoatDongCuoi = SYSUTCDATETIME()
             WHERE MaNguoiDung = :id
         """),
         {
-            "device": payload.MaThietBiHienTai,
+            "device": new_device,
             "push_token": payload.PushToken,
-            "id": current_user["MaNguoiDung"],
+            "id": user["MaNguoiDung"],
         },
     )
     db.commit()
+
+    # Nếu đăng nhập từ thiết bị khác với thiết bị đang hoạt động, đá phiên WebSocket cũ ngay
+    if new_device and old_device and new_device != old_device:
+        old_ws = arena_manager.active_connections.get(user["MaNguoiDung"])
+        if old_ws:
+            try:
+                await old_ws.close(
+                    code=4001,
+                    reason="Tài khoản đã đăng nhập trên thiết bị khác.",
+                )
+            except Exception:
+                pass
+
     return {"message": "Đã cập nhật thông tin thiết bị."}
 
 
@@ -216,7 +245,9 @@ def logout_user(
     db.execute(
         text("""
             UPDATE NguoiDung
-            SET TrangThaiOnline = 0, HoatDongCuoi = SYSUTCDATETIME()
+            SET TrangThaiOnline = 0,
+                MaThietBiHienTai = NULL,
+                HoatDongCuoi = SYSUTCDATETIME()
             WHERE MaNguoiDung = :id
         """),
         {"id": current_user["MaNguoiDung"]},

@@ -1,7 +1,7 @@
 import uuid
 import firebase_admin
 from firebase_admin import auth, credentials
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -38,12 +38,14 @@ def verify_firebase_token(
 
 def get_current_user(
     token_data: dict = Depends(verify_firebase_token),
+    x_device_id: str | None = Header(default=None, alias="X-Device-Id"),
     db: Session = Depends(get_db),
 ) -> dict:
     firebase_uid = token_data.get("uid")
     email = token_data.get("email")
     name = token_data.get("name") or (email.split("@")[0] if email else "ThiSinh")
     picture = token_data.get("picture")
+    clean_device_id = x_device_id.strip() if x_device_id else None
 
     query_find = text("""
         SELECT nd.*, cb.TenHang
@@ -78,12 +80,12 @@ def get_current_user(
                 INSERT INTO NguoiDung (
                     FirebaseUid, TenDangNhap, Email, MatKhauHash, HoTen,
                     AnhDaiDien, VaiTro, SoCupHienTai, MaHangHienTai,
-                    TrangThaiOnline, HoatDongCuoi, TrangThaiTaiKhoan
+                    MaThietBiHienTai, TrangThaiOnline, HoatDongCuoi, TrangThaiTaiKhoan
                 )
                 VALUES (
                     :uid, :username, :email, 'FIREBASE_AUTH', :hoten,
                     :avatar, 'THI_SINH', 0, :mahang,
-                    1, SYSUTCDATETIME(), 'HOAT_DONG'
+                    :device_id, 1, SYSUTCDATETIME(), 'HOAT_DONG'
                 )
             """),
             {
@@ -93,18 +95,28 @@ def get_current_user(
                 "hoten": name,
                 "avatar": picture,
                 "mahang": ma_hang_mac_dinh,
+                "device_id": clean_device_id,
             },
         )
         db.commit()
         user = db.execute(query_find, {"uid": firebase_uid}).mappings().first()
     else:
+        active_device = (user.get("MaThietBiHienTai") or "").strip()
+        if clean_device_id and active_device and clean_device_id != active_device:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="SESSION_REPLACED: Tài khoản đã được đăng nhập trên thiết bị khác.",
+            )
+
         db.execute(
             text("""
                 UPDATE NguoiDung
-                SET TrangThaiOnline = 1, HoatDongCuoi = SYSUTCDATETIME()
+                SET TrangThaiOnline = 1,
+                    HoatDongCuoi = SYSUTCDATETIME(),
+                    MaThietBiHienTai = COALESCE(MaThietBiHienTai, :device_id)
                 WHERE MaNguoiDung = :id
             """),
-            {"id": user["MaNguoiDung"]},
+            {"id": user["MaNguoiDung"], "device_id": clean_device_id},
         )
         db.commit()
 

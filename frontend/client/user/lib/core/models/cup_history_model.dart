@@ -40,6 +40,7 @@ class CupHistoryModel {
       case 'HOAN_PHAT':
         return 'Hoàn phạt cúp';
       case 'ADMIN_DIEU_CHINH':
+      case 'ADMIN_CONG_TRU':
         return 'Điều chỉnh từ hệ thống';
       default:
         return 'Biến động cúp';
@@ -48,15 +49,18 @@ class CupHistoryModel {
 
   factory CupHistoryModel.fromJson(Map<String, dynamic> json) {
     return CupHistoryModel(
-      maBienDong: json['MaBienDong'] ?? 0,
-      loaiBienDong: json['LoaiBienDong'] ?? '',
-      maThamChieu: json['MaThamChieu'],
-      soCupThayDoi: json['SoCupThayDoi'] ?? 0,
-      soCupTruoc: json['SoCupTruoc'] ?? 0,
-      soCupSau: json['SoCupSau'] ?? 0,
-      moTa: json['MoTa'],
+      maBienDong: int.tryParse((json['MaBienDong'] ?? 0).toString()) ?? 0,
+      loaiBienDong: (json['LoaiBienDong'] ?? '').toString(),
+      maThamChieu: json['MaThamChieu'] != null
+          ? int.tryParse(json['MaThamChieu'].toString())
+          : null,
+      soCupThayDoi:
+          int.tryParse((json['SoCupThayDoi'] ?? 0).toString()) ?? 0,
+      soCupTruoc: int.tryParse((json['SoCupTruoc'] ?? 0).toString()) ?? 0,
+      soCupSau: int.tryParse((json['SoCupSau'] ?? 0).toString()) ?? 0,
+      moTa: json['MoTa']?.toString(),
       ngayTao: json['NgayTao'] != null
-          ? DateTime.tryParse(json['NgayTao'].toString())
+          ? DateTime.tryParse(json['NgayTao'].toString())?.toLocal()
           : null,
     );
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class ApiConstants {
-  static const bool useNgrok = true;
+  static const bool useNgrok = false;
 
   static const String _lanHost = String.fromEnvironment(
     'API_HOST',

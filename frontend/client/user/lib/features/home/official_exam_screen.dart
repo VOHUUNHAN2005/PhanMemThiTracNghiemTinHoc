@@ -38,7 +38,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   bool dongY = true;
   String _violationReason = 'Chủ động thoát màn hình thi giữa chừng';
 
-  // Đếm số lần rời/ẩn màn hình thi (3 lần mới đánh gian lận & khóa tài khoản)
   int _leaveScreenCount = 0;
   bool _isAwayFromScreen = false;
   bool _pendingWarningDialog = false;
@@ -48,7 +47,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
   String _searchKeyword = '';
   Map<String, dynamic>? _selectedExam;
 
-  // Đánh giá độ khó & góp ý
   Map<String, dynamic>? _reviewSummary;
   int _selectedDifficultyStar = 3;
   final TextEditingController _feedbackController = TextEditingController();
@@ -84,8 +82,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Đóng hẳn app (detached) hoặc mất mạng/tắt nguồn: KHÔNG gọi cheat khóa tài khoản.
-    // Lượt thi đang dở sẽ tự động bị backend đánh dấu hủy khi người dùng mở lại sau.
     if (state == AppLifecycleState.detached) {
       return;
     }
@@ -94,7 +90,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       return;
     }
 
-    // Rời màn hình (kéo thanh thông báo, chuyển app, đa nhiệm, tắt màn hình)
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
@@ -110,7 +105,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       return;
     }
 
-    // Khi thí sinh quay lại màn hình thi ở lần 1 hoặc lần 2 -> hiện cảnh báo
     if (state == AppLifecycleState.resumed) {
       _isAwayFromScreen = false;
       if (_pendingWarningDialog &&
@@ -179,7 +173,6 @@ class _OfficialExamScreenState extends State<OfficialExamScreen>
       } catch (_) {}
     }
 
-    // Tự động đăng xuất vì tài khoản đã bị khóa
     try {
       await FirebaseAuth.instance.signOut();
     } catch (_) {}

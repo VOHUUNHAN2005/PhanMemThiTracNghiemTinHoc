@@ -224,13 +224,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const Divider(height: 20),
             _buildRuleRow('Đề thi chính thức (Đạt lần đầu)', '+100 Cúp', true),
-            _buildRuleRow('Đấu 1vs1 - Thắng trận', '+50 Cúp', true),
-            _buildRuleRow('Đấu 1vs1 - Thua trận', '-25 Cúp', false),
-            _buildRuleRow('Đấu 1vs1 / Giải đấu - Bỏ cuộc', '-30 Cúp', false),
-            _buildRuleRow('Giải đấu nhiều người - Top 1', '+100 Cúp', true),
-            _buildRuleRow('Giải đấu nhiều người - Top 2', '+70 Cúp', true),
-            _buildRuleRow('Giải đấu nhiều người - Top 3', '+50 Cúp', true),
-            _buildRuleRow('Giải đấu nhiều người - Hạng 4+', '+25 Cúp', true),
+            _buildRuleRow('Đấu 1vs1 - Thắng trận (đúng > 50%)', '+50 Cúp', true),
+            _buildRuleRow('Đấu 1vs1 - Thua trận (đúng > 50%)', '+25 Cúp', true),
+            _buildRuleRow('Đấu 1vs1 / Giải đấu - Đúng ≤ 50% hoặc bỏ cuộc', '+0 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Top 1 (đúng > 50%)', '+100 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Top 2 (đúng > 50%)', '+70 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Top 3 (đúng > 50%)', '+50 Cúp', true),
+            _buildRuleRow('Giải đấu nhiều người - Hạng 4+ (đúng > 50%)', '+25 Cúp', true),
             const SizedBox(height: 12),
           ],
         ),
@@ -857,7 +857,6 @@ class CupHistoryCard extends StatelessWidget {
             )
           else
             ConstrainedBox(
-              // Tối đa 7 hàng (~40px/hàng = 280px), nhiều hơn sẽ cuộn bên trong
               constraints: const BoxConstraints(maxHeight: 280),
               child: Scrollbar(
                 thumbVisibility: hasScroll,

@@ -483,7 +483,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: 390,
                   child: Column(
                     children: [
-                      // Hàng 1: Ôn tập | Thi chính thức
                       Row(
                         children: [
                           Expanded(
@@ -518,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      // Hàng 2: Bộ đề yêu thích (nằm trước) | Thi đấu trực tuyến
+
                       Row(
                         children: [
                           Expanded(
@@ -558,12 +557,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      // Hàng 3: Lịch sử & BXH
+
                       _buildFeatureCard(
                         icon: Icons.bar_chart_rounded,
                         iconBg: const Color(0xFF16A34A),
-                        title: 'Lịch sử & BXH',
-                        subtitle: 'Kết quả làm bài, biến động cúp & thứ hạng',
+                        title: 'Lịch sử & BĐ Cúp',
+                        subtitle: 'Kết quả làm bài, biến động cúp',
                         subtitleColor: const Color(0xFF64748B),
                         onTap: () {
                           Navigator.push(
@@ -575,7 +574,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      // Banner Quản lý bạn bè
+
                       GestureDetector(
                         onTap: () => setState(() => _tabIndex = 3),
                         child: Container(

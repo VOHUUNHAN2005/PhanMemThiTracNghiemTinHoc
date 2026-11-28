@@ -2,6 +2,7 @@ import os
 import random
 import shutil
 import uuid
+from datetime import timedelta, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
@@ -21,6 +22,18 @@ router = APIRouter(
 )
 
 ALLOWED_IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+VN_TZ = timezone(timedelta(hours=7))
+
+
+def _to_vn_iso(dt) -> Optional[str]:
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        return dt
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=VN_TZ).isoformat()
+    return dt.astimezone(VN_TZ).isoformat()
+
 
 class UpdateUserStatusRequest(BaseModel):
     TrangThaiTaiKhoan: str = Field(..., pattern="^(HOAT_DONG|BI_KHOA)$")
@@ -79,6 +92,7 @@ class QuestionCreateUpdateRequest(BaseModel):
     MucDo: str = Field("TRUNG_BINH", pattern="^(DE|TRUNG_BINH|KHO)$")
     TrangThai: str = Field("HOAT_DONG", pattern="^(HOAT_DONG|AN)$")
     DapAn: List[AnswerItemRequest] = Field(..., min_length=2)
+
 
 @router.get("/question-types")
 def get_question_types(db: Session = Depends(get_db)):
@@ -259,7 +273,7 @@ def adjust_user_cups(
                 )
                 VALUES (
                     :id, 'ADMIN_DIEU_CHINH', NULL,
-                    :delta, :truoc, :sau, :mota, GETDATE()
+                    :delta, :truoc, :sau, :mota, DATEADD(HOUR, 7, SYSUTCDATETIME())
                 )
             """),
             {
@@ -670,7 +684,6 @@ def auto_generate_exams(
     if not topic:
         raise HTTPException(status_code=404, detail="Không tìm thấy chủ đề được chọn.")
 
-
     easy_ids = [
         r[0]
         for r in db.execute(
@@ -693,9 +706,7 @@ def auto_generate_exams(
         ).all()
     ]
 
-
     if payload.LoaiBoDe == "LUYEN_TAP":
-
         req_easy = payload.SoLuongDe * payload.SoCauDe
         req_med = payload.SoLuongDe * payload.SoCauTrungBinh
         req_hard = payload.SoLuongDe * payload.SoCauKho
@@ -1184,6 +1195,8 @@ def remove_question_from_exam(
 
     db.commit()
     return {"message": "Đã xóa câu hỏi khỏi bộ đề."}
+
+
 class AttachQuestionsRequest(BaseModel):
     MaCauHoiList: List[int] = Field(..., min_length=1)
 
@@ -1278,7 +1291,7 @@ def get_user_activity_history(user_id: int, db: Session = Depends(get_db)):
                 c.TenChuDe,
                 l.ThoiGianBatDau,
                 l.ThoiGianNopBai,
-                DATEDIFF(SECOND, l.ThoiGianBatDau, ISNULL(l.ThoiGianNopBai, GETDATE())) AS ThoiGianLamGiay,
+                DATEDIFF(SECOND, l.ThoiGianBatDau, ISNULL(l.ThoiGianNopBai, DATEADD(HOUR, 7, SYSUTCDATETIME()))) AS ThoiGianLamGiay,
                 l.TrangThai,
                 l.SoCauDung,
                 l.TongSoCau,
@@ -1304,10 +1317,8 @@ def get_user_activity_history(user_id: int, db: Session = Depends(get_db)):
         item = dict(a)
         if item["DiemSo"] is not None:
             item["DiemSo"] = float(item["DiemSo"])
-        if item["ThoiGianBatDau"]:
-            item["ThoiGianBatDau"] = item["ThoiGianBatDau"].isoformat()
-        if item["ThoiGianNopBai"]:
-            item["ThoiGianNopBai"] = item["ThoiGianNopBai"].isoformat()
+        item["ThoiGianBatDau"] = _to_vn_iso(item["ThoiGianBatDau"])
+        item["ThoiGianNopBai"] = _to_vn_iso(item["ThoiGianNopBai"])
         item["DaDat"] = bool(item["DaDat"]) if item["DaDat"] is not None else False
         item["DaNhanCup"] = bool(item["DaNhanCup"]) if item["DaNhanCup"] is not None else False
 
@@ -1344,8 +1355,7 @@ def get_user_activity_history(user_id: int, db: Session = Depends(get_db)):
     cup_list = []
     for log in cup_logs:
         item = dict(log)
-        if item["NgayTao"]:
-            item["NgayTao"] = item["NgayTao"].isoformat()
+        item["NgayTao"] = _to_vn_iso(item["NgayTao"])
         cup_list.append(item)
 
     current_cups = (
@@ -1396,7 +1406,7 @@ def get_attempt_detail(ma_luot_lam: int, db: Session = Depends(get_db)):
                 c.TenChuDe,
                 l.ThoiGianBatDau,
                 l.ThoiGianNopBai,
-                DATEDIFF(SECOND, l.ThoiGianBatDau, ISNULL(l.ThoiGianNopBai, GETDATE())) AS ThoiGianLamGiay,
+                DATEDIFF(SECOND, l.ThoiGianBatDau, ISNULL(l.ThoiGianNopBai, DATEADD(HOUR, 7, SYSUTCDATETIME()))) AS ThoiGianLamGiay,
                 l.TrangThai,
                 l.SoCauDung,
                 l.TongSoCau,
@@ -1501,10 +1511,8 @@ def get_attempt_detail(ma_luot_lam: int, db: Session = Depends(get_db)):
     attempt_info = dict(attempt)
     if attempt_info["DiemSo"] is not None:
         attempt_info["DiemSo"] = float(attempt_info["DiemSo"])
-    if attempt_info["ThoiGianBatDau"]:
-        attempt_info["ThoiGianBatDau"] = attempt_info["ThoiGianBatDau"].isoformat()
-    if attempt_info["ThoiGianNopBai"]:
-        attempt_info["ThoiGianNopBai"] = attempt_info["ThoiGianNopBai"].isoformat()
+    attempt_info["ThoiGianBatDau"] = _to_vn_iso(attempt_info["ThoiGianBatDau"])
+    attempt_info["ThoiGianNopBai"] = _to_vn_iso(attempt_info["ThoiGianNopBai"])
     attempt_info["DaDat"] = bool(attempt_info["DaDat"]) if attempt_info["DaDat"] is not None else False
     attempt_info["DaNhanCup"] = bool(attempt_info["DaNhanCup"]) if attempt_info["DaNhanCup"] is not None else False
 
@@ -1512,6 +1520,8 @@ def get_attempt_detail(ma_luot_lam: int, db: Session = Depends(get_db)):
         "attempt": attempt_info,
         "questions": question_details,
     }
+
+
 DIFFICULTY_MAP_ADMIN = {
     1: "Rất dễ",
     2: "Dễ",
@@ -1571,11 +1581,13 @@ def get_exam_feedbacks_for_admin(ma_bo_de: int, db: Session = Depends(get_db)):
                 "SoSao": r["SoSao"],
                 "NhanMucDo": DIFFICULTY_MAP_ADMIN.get(r["SoSao"], "Trung bình"),
                 "GopY": r["GopY"],
-                "NgayDanhGia": r["NgayDanhGia"].isoformat() if r["NgayDanhGia"] else None,
+                "NgayDanhGia": _to_vn_iso(r["NgayDanhGia"]),
             }
             for r in rows
         ],
     }
+
+
 class AdminCreateTournamentRequest(BaseModel):
     MaChuDe: int
     SoCauHoi: int = Field(50, ge=5, le=100)
@@ -1663,12 +1675,9 @@ def list_arena_rooms(
         item["TenChuDe"] = rt_room.ten_chu_de if rt_room else "Chủ đề đấu trường"
         item["CoMatKhau"] = bool(r["MatKhauPhong"])
         item["DangTrongRam"] = rt_room is not None
-        if item["ThoiGianBatDau"]:
-            item["ThoiGianBatDau"] = item["ThoiGianBatDau"].isoformat()
-        if item["ThoiGianKetThuc"]:
-            item["ThoiGianKetThuc"] = item["ThoiGianKetThuc"].isoformat()
-        if item["NgayTao"]:
-            item["NgayTao"] = item["NgayTao"].isoformat()
+        item["ThoiGianBatDau"] = _to_vn_iso(item["ThoiGianBatDau"])
+        item["ThoiGianKetThuc"] = _to_vn_iso(item["ThoiGianKetThuc"])
+        item["NgayTao"] = _to_vn_iso(item["NgayTao"])
         items.append(item)
 
     return {
@@ -1724,7 +1733,7 @@ def get_arena_room_detail(ma_phong: int, db: Session = Depends(get_db)):
     room_dict = dict(room)
     for k in ("ThoiGianBatDau", "ThoiGianKetThuc", "NgayTao"):
         if room_dict.get(k):
-            room_dict[k] = room_dict[k].isoformat()
+            room_dict[k] = _to_vn_iso(room_dict[k])
 
     return {
         "room": room_dict,

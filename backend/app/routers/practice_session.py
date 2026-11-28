@@ -113,7 +113,6 @@ def _build_practice_session_payload(db: Session, ma_luot_lam: int, ma_bo_de: int
     }
 
 
-
 @router.post("/exams/{ma_bo_de}/start")
 def start_or_resume_practice(
     ma_bo_de: int,
@@ -347,7 +346,7 @@ def finish_practice_attempt(
         text("""
             UPDATE LuotLamBai
             SET TrangThai = 'DA_NOP',
-                ThoiGianNopBai = SYSUTCDATETIME(),
+                ThoiGianNopBai = DATEADD(HOUR, 7, SYSUTCDATETIME()),
                 SoCauDung = :dung,
                 DiemSo = :diem,
                 DaDat = :dat

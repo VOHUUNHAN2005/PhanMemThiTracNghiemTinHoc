@@ -35,7 +35,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
   void initState() {
     super.initState();
     _loadData();
-    // Cập nhật trạng thái online/offline và lời mời định kỳ mỗi 10 giây
+
     _realtimeTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted && !_isLoading) {
         _refreshSilent();
@@ -69,9 +69,7 @@ class _FriendsScreenState extends State<FriendsScreen> {
           _syncSentUserIds();
         });
       }
-    } catch (_) {
-      // Bỏ qua lỗi nền khi poll định kỳ để không làm phiền UI
-    }
+    } catch (_) {}
   }
 
   Future<void> _loadData() async {
@@ -139,17 +137,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
     ]) {
       final nested = map[key];
       if (nested is Map) {
-        return {
-          ...Map<String, dynamic>.from(nested),
-          ...map,
-        };
+        return {...Map<String, dynamic>.from(nested), ...map};
       }
     }
     return map;
   }
 
   int _extractUserId(Map<String, dynamic> item) {
-    final raw = item['MaNguoiDung'] ??
+    final raw =
+        item['MaNguoiDung'] ??
         item['ma_nguoi_dung'] ??
         item['target_user_id'] ??
         item['receiver_id'] ??
@@ -164,7 +160,8 @@ class _FriendsScreenState extends State<FriendsScreen> {
   }
 
   bool _isUserOnline(Map<String, dynamic> item) {
-    final raw = item['is_online'] ??
+    final raw =
+        item['is_online'] ??
         item['IsOnline'] ??
         item['online'] ??
         item['Online'] ??
@@ -236,9 +233,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       }
     } catch (e) {
       if (mounted && _searchQuery == trimmed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     } finally {
       if (mounted && _searchQuery == trimmed) {
@@ -266,9 +263,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _refreshSilent();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     } finally {
       if (mounted) {
@@ -292,9 +289,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _refreshSilent();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     } finally {
       if (mounted) {
@@ -326,9 +323,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     }
   }
@@ -371,9 +368,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
       await _loadData();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     } finally {
       if (mounted) {
@@ -427,7 +424,9 @@ class _FriendsScreenState extends State<FriendsScreen> {
             width: 12,
             height: 12,
             decoration: BoxDecoration(
-              color: isOnline ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+              color: isOnline
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFF94A3B8),
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
             ),
@@ -440,12 +439,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Widget _buildFriendCard(dynamic rawItem) {
     final item = _unwrapUserMap(rawItem);
     final int userId = _extractUserId(item);
-    final String name = (item['HoTen'] ??
-            item['ho_ten'] ??
-            item['TenDangNhap'] ??
-            item['ten_dang_nhap'] ??
-            'Người dùng')
-        .toString();
+    final String name =
+        (item['HoTen'] ??
+                item['ho_ten'] ??
+                item['TenDangNhap'] ??
+                item['ten_dang_nhap'] ??
+                'Người dùng')
+            .toString();
     final bool online = _isUserOnline(item);
     final bool isRemoving = _removingFriendIds.contains(userId);
 
@@ -454,8 +454,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
       color: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: ListTile(
-        contentPadding:
-            const EdgeInsets.only(left: 14, right: 8, top: 4, bottom: 4),
+        contentPadding: const EdgeInsets.only(
+          left: 14,
+          right: 8,
+          top: 4,
+          bottom: 4,
+        ),
         leading: _buildAvatarWithStatus(online),
         title: Text(
           name,
@@ -514,12 +518,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Widget _buildRequestCard(dynamic rawItem) {
     final item = _unwrapUserMap(rawItem);
     final int userId = _extractUserId(item);
-    final String name = (item['HoTen'] ??
-            item['ho_ten'] ??
-            item['TenDangNhap'] ??
-            item['ten_dang_nhap'] ??
-            'Người dùng')
-        .toString();
+    final String name =
+        (item['HoTen'] ??
+                item['ho_ten'] ??
+                item['TenDangNhap'] ??
+                item['ten_dang_nhap'] ??
+                'Người dùng')
+            .toString();
 
     return Card(
       elevation: 0,
@@ -565,14 +570,15 @@ class _FriendsScreenState extends State<FriendsScreen> {
   Widget _buildSearchResultCard(dynamic rawItem) {
     final item = _unwrapUserMap(rawItem);
     final int userId = _extractUserId(item);
-    final String name = (item['HoTen'] ??
-            item['ho_ten'] ??
-            item['TenDangNhap'] ??
-            item['ten_dang_nhap'] ??
-            'Người dùng')
+    final String name =
+        (item['HoTen'] ??
+                item['ho_ten'] ??
+                item['TenDangNhap'] ??
+                item['ten_dang_nhap'] ??
+                'Người dùng')
+            .toString();
+    final String username = (item['TenDangNhap'] ?? item['ten_dang_nhap'] ?? '')
         .toString();
-    final String username =
-        (item['TenDangNhap'] ?? item['ten_dang_nhap'] ?? '').toString();
     final bool online = _isUserOnline(item);
     final bool isSent = _sentUserIds.contains(userId);
     final bool isSending = _sendingUserIds.contains(userId);
@@ -683,8 +689,10 @@ class _FriendsScreenState extends State<FriendsScreen> {
             ],
           ),
           border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 14,
+          ),
         ),
       ),
     );
@@ -848,10 +856,7 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     for (final key in ['data', 'profile', 'user', 'nguoi_dung', 'NguoiDung']) {
       final inner = map[key];
       if (inner is Map) {
-        return {
-          ...Map<String, dynamic>.from(inner),
-          ...map,
-        };
+        return {...Map<String, dynamic>.from(inner), ...map};
       }
     }
     return map;
@@ -860,7 +865,8 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
   bool _resolveOnline() {
     final p = _profile;
     if (p != null) {
-      final raw = p['is_online'] ??
+      final raw =
+          p['is_online'] ??
           p['IsOnline'] ??
           p['online'] ??
           p['Online'] ??
@@ -931,16 +937,16 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
     try {
       await _friendService.unfriend(widget.targetUserId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đã hủy kết bạn với $name.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Đã hủy kết bạn với $name.')));
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_cleanError(e))),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_cleanError(e))));
       }
     } finally {
       if (mounted) {
@@ -964,23 +970,25 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hoTen = (_profile?['HoTen'] ??
-            _profile?['ho_ten'] ??
-            widget.initialName ??
-            'Hồ sơ')
-        .toString();
+    final hoTen =
+        (_profile?['HoTen'] ??
+                _profile?['ho_ten'] ??
+                widget.initialName ??
+                'Hồ sơ')
+            .toString();
     final username =
         (_profile?['TenDangNhap'] ?? _profile?['ten_dang_nhap'] ?? '')
             .toString();
-    final tenHang =
-        (_profile?['TenHang'] ?? _profile?['ten_hang'] ?? 'Đồng').toString();
-    final soCup = _profile?['SoCupHienTai'] ?? _profile?['so_cup_hien_tai'] ?? 0;
+    final tenHang = (_profile?['TenHang'] ?? _profile?['ten_hang'] ?? 'Đồng')
+        .toString();
+    final soCup =
+        _profile?['SoCupHienTai'] ?? _profile?['so_cup_hien_tai'] ?? 0;
     final soTranThang =
         _profile?['SoTranThang'] ?? _profile?['so_tran_thang'] ?? 0;
     final diemTrungBinh =
         _profile?['DiemTrungBinh'] ?? _profile?['diem_trung_binh'];
-    final avatarUrl =
-        (_profile?['AnhDaiDien'] ?? _profile?['anh_dai_dien'])?.toString();
+    final avatarUrl = (_profile?['AnhDaiDien'] ?? _profile?['anh_dai_dien'])
+        ?.toString();
     final hasImg = avatarUrl != null && avatarUrl.trim().isNotEmpty;
     final online = _resolveOnline();
 
@@ -989,186 +997,185 @@ class _FriendProfileScreenState extends State<FriendProfileScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _loadProfile,
+                      child: const Text('Thử lại'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadProfile,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Center(
+                    child: CircleAvatar(
+                      radius: 44,
+                      backgroundColor: const Color(0xFF1D5CE5),
+                      backgroundImage: hasImg ? NetworkImage(avatarUrl) : null,
+                      child: !hasImg
+                          ? Text(
+                              _getInitials(hoTen),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: Text(
+                      hoTen,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Center(
+                    child: Text(
+                      online ? 'online' : 'offline',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: online
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  if (username.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Center(
+                      child: Text(
+                        '@$username',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
+                        Column(
+                          children: [
+                            const Text(
+                              'Hạng',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              tenHang,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: _loadProfile,
-                          child: const Text('Thử lại'),
+                        Column(
+                          children: [
+                            const Text(
+                              'Số cúp',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$soCup',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
+                        Column(
+                          children: [
+                            const Text(
+                              'Thắng',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$soTranThang',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (diemTrungBinh != null)
+                          Column(
+                            children: [
+                              const Text(
+                                'Điểm TB',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$diemTrungBinh',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadProfile,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      Center(
-                        child: CircleAvatar(
-                          radius: 44,
-                          backgroundColor: const Color(0xFF1D5CE5),
-                          backgroundImage:
-                              hasImg ? NetworkImage(avatarUrl) : null,
-                          child: !hasImg
-                              ? Text(
-                                  _getInitials(hoTen),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                )
-                              : null,
-                        ),
+                  if (widget.isFriend) ...[
+                    const SizedBox(height: 20),
+                    OutlinedButton.icon(
+                      onPressed: _isRemoving
+                          ? null
+                          : () => _handleUnfriendInProfile(hoTen),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: const BorderSide(color: Colors.redAccent),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
-                      const SizedBox(height: 14),
-                      Center(
-                        child: Text(
-                          hoTen,
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Center(
-                        child: Text(
-                          online ? 'online' : 'offline',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: online
-                                ? const Color(0xFF16A34A)
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                      ),
-                      if (username.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Center(
-                          child: Text(
-                            '@$username',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            Column(
-                              children: [
-                                const Text(
-                                  'Hạng',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  tenHang,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              children: [
-                                const Text(
-                                  'Số cúp',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$soCup',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              children: [
-                                const Text(
-                                  'Thắng',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$soTranThang',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (diemTrungBinh != null)
-                              Column(
-                                children: [
-                                  const Text(
-                                    'Điểm TB',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '$diemTrungBinh',
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
+                      icon: _isRemoving
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.redAccent,
                               ),
-                          ],
-                        ),
-                      ),
-                      if (widget.isFriend) ...[
-                        const SizedBox(height: 20),
-                        OutlinedButton.icon(
-                          onPressed: _isRemoving
-                              ? null
-                              : () => _handleUnfriendInProfile(hoTen),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: const BorderSide(color: Colors.redAccent),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          icon: _isRemoving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.redAccent,
-                                  ),
-                                )
-                              : const Icon(Icons.person_remove_outlined),
-                          label: const Text('Hủy kết bạn'),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                            )
+                          : const Icon(Icons.person_remove_outlined),
+                      label: const Text('Hủy kết bạn'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
     );
   }
 }

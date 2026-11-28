@@ -128,7 +128,7 @@ class ArenaRealtimeManager:
             db.execute(
                 text("""
                     UPDATE NguoiDung
-                    SET TrangThaiOnline = :st, HoatDongCuoi = SYSUTCDATETIME()
+                    SET TrangThaiOnline = :st, HoatDongCuoi = DATEADD(HOUR, 7, SYSUTCDATETIME())
                     WHERE MaNguoiDung = :uid
                 """),
                 {"st": 1 if is_online else 0, "uid": user_id},
@@ -294,13 +294,13 @@ class ArenaRealtimeManager:
                     INSERT INTO PhongThiDau (
                         MaCodePhong, LoaiPhong, CheDoGhep, MaChuPhong,
                         MaBoDe, ThoiGianMoiCau, MatKhauPhong,
-                        DanhSachCauHoiJson, TrangThai
+                        DanhSachCauHoiJson, TrangThai, NgayTao
                     )
                     OUTPUT INSERTED.MaPhong
                     VALUES (
                         :code, :loai, 'MOI_BAN_BE', :host,
                         NULL, 15, :pwd,
-                        :qjson, 'CHO_NGUOI_CHOI'
+                        :qjson, 'CHO_NGUOI_CHOI', DATEADD(HOUR, 7, SYSUTCDATETIME())
                     )
                 """),
                 {
@@ -407,7 +407,8 @@ class ArenaRealtimeManager:
                     OUTPUT INSERTED.MaLoiMoi, INSERTED.ThoiGianHetHan
                     VALUES (
                         :phong, :target, 'CHO_PHAN_HOI',
-                        DATEADD(SECOND, 60, SYSUTCDATETIME()), SYSUTCDATETIME()
+                        DATEADD(SECOND, 60, DATEADD(HOUR, 7, SYSUTCDATETIME())),
+                        DATEADD(HOUR, 7, SYSUTCDATETIME())
                     )
                 """),
                 {"phong": ma_phong, "target": target_user_id},
@@ -420,6 +421,8 @@ class ArenaRealtimeManager:
             db.close()
 
         host = room.players[host_id]
+        exp_dt = inserted["ThoiGianHetHan"]
+        exp_iso = f"{exp_dt.isoformat()}+07:00" if exp_dt and exp_dt.tzinfo is None else (exp_dt.isoformat() if exp_dt else None)
         payload = {
             "MaLoiMoi": inserted["MaLoiMoi"],
             "MaPhong": room.ma_phong,
@@ -435,7 +438,7 @@ class ArenaRealtimeManager:
                 "SoCupHienTai": host.so_cup,
                 "TenHang": host.ten_hang,
             },
-            "ThoiGianHetHan": inserted["ThoiGianHetHan"].isoformat(),
+            "ThoiGianHetHan": exp_iso,
         }
         await self.send_personal(target_user_id, "ROOM_INVITE_RECEIVED", payload)
         return payload
@@ -600,7 +603,7 @@ class ArenaRealtimeManager:
             db.execute(
                 text("""
                     UPDATE PhongThiDau
-                    SET TrangThai = 'DANG_DIEN_RA', ThoiGianBatDau = SYSUTCDATETIME()
+                    SET TrangThai = 'DANG_DIEN_RA', ThoiGianBatDau = DATEADD(HOUR, 7, SYSUTCDATETIME())
                     WHERE MaPhong = :phong
                 """),
                 {"phong": ma_phong},
@@ -1089,7 +1092,7 @@ class ArenaRealtimeManager:
             db.execute(
                 text("""
                     UPDATE PhongThiDau
-                    SET TrangThai = :st, ThoiGianKetThuc = SYSUTCDATETIME()
+                    SET TrangThai = :st, ThoiGianKetThuc = DATEADD(HOUR, 7, SYSUTCDATETIME())
                     WHERE MaPhong = :phong
                 """),
                 {"st": room.status, "phong": room.ma_phong},
@@ -1104,6 +1107,9 @@ class ArenaRealtimeManager:
                 if p.cheated or p.left_or_forfeited:
                     cup_delta = 0
                     ket_qua_label = "VI_PHAM" if p.cheated else "BO_CUOC"
+                    loai_bien_dong = "PHAT_GIAN_LAN" if p.cheated else (
+                        "THUA_1VS1" if room.loai_phong == "DOI_KHANG_1VS1" else "GIAI_DAU_NN"
+                    )
                 elif is_cancelled:
                     ket_qua_label = "HUY_TRAN"
                     if is_qualified_for_cup:
@@ -1151,27 +1157,32 @@ class ArenaRealtimeManager:
                         """),
                         {"cup_sau": cup_sau, "ma_hang": new_rank_id, "uid": p.user_id},
                     )
-                    db.execute(
-                        text("""
-                            INSERT INTO LichSuBienDongCup (
-                                MaNguoiDung, LoaiBienDong, MaThamChieu,
-                                SoCupThayDoi, SoCupTruoc, SoCupSau, MoTa, NgayTao
-                            )
-                            VALUES (
-                                :uid, :loai, :phong,
-                                :delta, :truoc, :sau, :mota, SYSUTCDATETIME()
-                            )
-                        """),
-                        {
-                            "uid": p.user_id,
-                            "loai": loai_bien_dong,
-                            "phong": room.ma_phong,
-                            "delta": cup_delta,
-                            "truoc": cup_truoc,
-                            "sau": cup_sau,
-                            "mota": f"Phòng {room.ma_code_phong} ({ket_qua_label})",
-                        },
-                    )
+
+                # Ghi log biến động cúp cho MỌI trận đấu kết thúc (kể cả +0 cúp)
+                mota_chi_tiet = (
+                    f"Phòng {room.ma_code_phong} ({ket_qua_label} • Đúng {p.correct_count}/{total_questions})"
+                )
+                db.execute(
+                    text("""
+                        INSERT INTO LichSuBienDongCup (
+                            MaNguoiDung, LoaiBienDong, MaThamChieu,
+                            SoCupThayDoi, SoCupTruoc, SoCupSau, MoTa, NgayTao
+                        )
+                        VALUES (
+                            :uid, :loai, :phong,
+                            :delta, :truoc, :sau, :mota, DATEADD(HOUR, 7, SYSUTCDATETIME())
+                        )
+                    """),
+                    {
+                        "uid": p.user_id,
+                        "loai": loai_bien_dong,
+                        "phong": room.ma_phong,
+                        "delta": cup_delta,
+                        "truoc": cup_truoc,
+                        "sau": cup_sau,
+                        "mota": mota_chi_tiet,
+                    },
+                )
 
                 tv_final_status = (
                     "VI_PHAM"
@@ -1214,8 +1225,11 @@ class ArenaRealtimeManager:
                 })
 
             db.commit()
-        except Exception:
+        except Exception as e:
             db.rollback()
+            import traceback
+            print("=== LOI LUU LICH SU CUP ARENA ===")
+            traceback.print_exc()
         finally:
             db.close()
 
@@ -1268,13 +1282,13 @@ class ArenaRealtimeManager:
                     INSERT INTO PhongThiDau (
                         MaCodePhong, LoaiPhong, CheDoGhep, MaChuPhong,
                         MaBoDe, ThoiGianMoiCau, MatKhauPhong,
-                        DanhSachCauHoiJson, TrangThai
+                        DanhSachCauHoiJson, TrangThai, NgayTao
                     )
                     OUTPUT INSERTED.MaPhong
                     VALUES (
                         :code, 'GIAI_DAU_NN', 'MOI_BAN_BE', :host,
                         NULL, 15, :pwd,
-                        :qjson, 'CHO_NGUOI_CHOI'
+                        :qjson, 'CHO_NGUOI_CHOI', DATEADD(HOUR, 7, SYSUTCDATETIME())
                     )
                 """),
                 {
@@ -1339,7 +1353,7 @@ class ArenaRealtimeManager:
             res = db.execute(
                 text("""
                     UPDATE PhongThiDau
-                    SET TrangThai = 'DA_HUY', ThoiGianKetThuc = SYSUTCDATETIME()
+                    SET TrangThai = 'DA_HUY', ThoiGianKetThuc = DATEADD(HOUR, 7, SYSUTCDATETIME())
                     WHERE MaPhong = :phong AND TrangThai IN ('CHO_NGUOI_CHOI', 'DANG_DIEN_RA')
                 """),
                 {"phong": ma_phong},

@@ -122,7 +122,7 @@ def _grade_and_finalize_attempt(db: Session, attempt: dict, force_status: str | 
                     )
                     VALUES (
                         :me, 'THI_CHINH_THUC_DAT', :ll_id,
-                        :cup, :truoc, :sau, :mota, SYSUTCDATETIME()
+                        :cup, :truoc, :sau, :mota, DATEADD(HOUR, 7, SYSUTCDATETIME())
                     )
                 """),
                 {

@@ -15,7 +15,7 @@ class ArenaLobbyScreen extends StatefulWidget {
 
 class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
   final TextEditingController _roomCodeController = TextEditingController();
-  int _selectedMode = 0; // 0: Đối kháng 1vs1, 1: Giải đấu Phòng
+  int _selectedMode = 0; 
 
   List<JsonMap> _topics = [];
   List<JsonMap> _openRooms = [];
@@ -410,7 +410,7 @@ class _ArenaLobbyScreenState extends State<ArenaLobbyScreen> {
     int selectedTopicId = _topics.isNotEmpty
         ? (int.tryParse((_topics.first['ma_chu_de'] ?? 0).toString()) ?? 0)
         : 0;
-    String visibilityMode = 'PUBLIC'; // PUBLIC | PRIVATE
+    String visibilityMode = 'PUBLIC';
     String? errorText;
     bool isSubmitting = false;
 

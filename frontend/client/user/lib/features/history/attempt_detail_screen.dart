@@ -22,7 +22,7 @@ class _AttemptDetailScreenState extends State<AttemptDetailScreen> {
   AttemptDetailModel? _detail;
   bool _isLoading = true;
   String? _error;
-  String _filter = 'ALL'; // ALL | CORRECT | WRONG | UNANSWERED
+  String _filter = 'ALL'; 
 
   @override
   void initState() {
@@ -120,7 +120,6 @@ class _AttemptDetailScreenState extends State<AttemptDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Card tổng quan kết quả
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -216,7 +215,6 @@ class _AttemptDetailScreenState extends State<AttemptDetailScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              // Bộ lọc câu hỏi
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -244,7 +242,6 @@ class _AttemptDetailScreenState extends State<AttemptDetailScreen> {
                 ),
               ),
               const SizedBox(height: 14),
-              // Danh sách từng câu
               ...List.generate(filteredQuestions.length, (idx) {
                 final q = filteredQuestions[idx];
                 final originalIndex = detail.danhSachCauHoi.indexOf(q) + 1;

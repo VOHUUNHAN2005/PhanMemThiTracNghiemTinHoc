@@ -86,9 +86,20 @@ class _UserActivityScreenState extends State<UserActivityScreen>
 
   String _formatCupType(String? code) {
     switch (code) {
+      case 'THI_CHINH_THUC_DAT':
       case 'THUONG_LAM_BAI':
       case 'HOAN_THANH_DE':
-        return 'Thưởng hoàn thành đề';
+        return 'Thi chính thức đạt';
+      case 'THANG_1VS1':
+        return 'Đấu trường 1vs1 (Thắng)';
+      case 'THUA_1VS1':
+        return 'Đấu trường 1vs1 (Thua)';
+      case 'GIAI_DAU_NN':
+        return 'Giải đấu nhiều người';
+      case 'PHAT_GIAN_LAN':
+        return 'Vi phạm / Gian lận';
+      case 'HOAN_PHAT':
+        return 'Hoàn phạt cúp';
       case 'ADMIN_DIEU_CHINH':
       case 'ADMIN_CONG_TRU':
         return 'Admin điều chỉnh';

@@ -1,7 +1,9 @@
 ﻿import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:user/core/constants/api_constants.dart';
 
@@ -15,11 +17,71 @@ class ArenaService {
   static Timer? _reconnectTimer;
   static bool _isConnecting = false;
   static bool _manualDisconnect = false;
+  static bool _isHandlingKick = false;
+  static String? _cachedDeviceId;
 
   static final StreamController<JsonMap> _eventController =
       StreamController<JsonMap>.broadcast();
 
   static Stream<JsonMap> get events => _eventController.stream;
+
+  static Future<String> getOrCreateDeviceId() async {
+    if (_cachedDeviceId != null && _cachedDeviceId!.isNotEmpty) {
+      return _cachedDeviceId!;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    String? saved = prefs.getString('app_unique_device_id');
+    if (saved == null || saved.trim().isEmpty) {
+      final rand = Random.secure();
+      final suffix = List.generate(
+        16,
+        (_) => rand.nextInt(16).toRadixString(16),
+      ).join();
+      saved = 'dev_${DateTime.now().millisecondsSinceEpoch}_$suffix';
+      await prefs.setString('app_unique_device_id', saved);
+    }
+    _cachedDeviceId = saved;
+    return saved;
+  }
+
+  static Future<void> registerCurrentDevice({String? pushToken}) async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null) return;
+    final deviceId = await getOrCreateDeviceId();
+
+    try {
+      await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/api/users/device'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+          'X-Device-Id': deviceId,
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: jsonEncode({
+          'MaThietBiHienTai': deviceId,
+          if (pushToken != null) 'PushToken': pushToken,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> _forceLogoutDuplicatedSession() async {
+    if (_isHandlingKick) return;
+    _isHandlingKick = true;
+    try {
+      _eventController.add({
+        'event': 'SESSION_REPLACED',
+        'data': {
+          'message': 'Tài khoản của bạn đã được đăng nhập trên thiết bị khác.',
+        },
+      });
+      await disconnect();
+      await FirebaseAuth.instance.signOut();
+    } finally {
+      _isHandlingKick = false;
+    }
+  }
 
   static Future<void> ensureConnected() async {
     if (_channel != null || _isConnecting) return;
@@ -29,9 +91,10 @@ class ArenaService {
     try {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       if (token == null) return;
+      final deviceId = await getOrCreateDeviceId();
 
       final uri = Uri.parse(
-        '${ApiConstants.wsBaseUrl}/ws/realtime?token=${Uri.encodeComponent(token)}',
+        '${ApiConstants.wsBaseUrl}/ws/realtime?token=${Uri.encodeComponent(token)}&device_id=${Uri.encodeComponent(deviceId)}',
       );
       final channel = WebSocketChannel.connect(uri);
       await channel.ready;
@@ -46,7 +109,14 @@ class ArenaService {
             }
           } catch (_) {}
         },
-        onDone: _handleSocketClosed,
+        onDone: () {
+          final closeCode = channel.closeCode;
+          if (closeCode == 4001) {
+            _forceLogoutDuplicatedSession();
+          } else {
+            _handleSocketClosed();
+          }
+        },
         onError: (_) => _handleSocketClosed(),
       );
 
@@ -93,23 +163,34 @@ class ArenaService {
     await ensureConnected();
     if (_channel == null) return;
     try {
-      _channel!.sink.add(jsonEncode({
-        'action': action,
-        'data': data ?? <String, dynamic>{},
-      }));
+      _channel!.sink.add(
+        jsonEncode({'action': action, 'data': data ?? <String, dynamic>{}}),
+      );
     } catch (_) {}
   }
 
   static Future<HeaderMap> _getHeaders() async {
     final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    final deviceId = await getOrCreateDeviceId();
     return {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
+      'X-Device-Id': deviceId,
       'ngrok-skip-browser-warning': 'true',
     };
   }
 
+  static void _checkSessionResponse(http.Response res) {
+    if (res.statusCode == 401) {
+      final rawText = utf8.decode(res.bodyBytes);
+      if (rawText.contains('SESSION_REPLACED')) {
+        _forceLogoutDuplicatedSession();
+      }
+    }
+  }
+
   static String _extractError(http.Response res, String fallback) {
+    _checkSessionResponse(res);
     try {
       final rawText = utf8.decode(res.bodyBytes).trim();
       if (rawText.isEmpty) {
@@ -124,8 +205,9 @@ class ArenaService {
         if (detail is List && detail.isNotEmpty) {
           final first = detail.first;
           if (first is Map && first['msg'] != null) {
-            final loc =
-                (first['loc'] is List) ? (first['loc'] as List).join('.') : '';
+            final loc = (first['loc'] is List)
+                ? (first['loc'] as List).join('.')
+                : '';
             return loc.isNotEmpty
                 ? '$loc: ${first['msg']}'
                 : first['msg'].toString();
@@ -156,6 +238,7 @@ class ArenaService {
         Uri.parse(ApiConstants.getMe),
         headers: headers,
       );
+      _checkSessionResponse(response);
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
         final JsonMap data = (decoded is Map && decoded['data'] is Map)
@@ -182,6 +265,7 @@ class ArenaService {
         Uri.parse(ApiConstants.homeTopics),
         headers: headers,
       );
+      _checkSessionResponse(response);
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
         final List raw = (decoded is Map && decoded['data'] is List)
@@ -191,10 +275,12 @@ class ArenaService {
           final m = JsonMap.from(e);
           return {
             'ma_chu_de':
-                int.tryParse((m['MaChuDe'] ?? m['ma_chu_de'] ?? 0).toString()) ??
-                    0,
-            'ten_chu_de':
-                (m['TenChuDe'] ?? m['ten_chu_de'] ?? 'Chủ đề Tin học').toString(),
+                int.tryParse(
+                  (m['MaChuDe'] ?? m['ma_chu_de'] ?? 0).toString(),
+                ) ??
+                0,
+            'ten_chu_de': (m['TenChuDe'] ?? m['ten_chu_de'] ?? 'Chủ đề Tin học')
+                .toString(),
           };
         }).toList();
       }
@@ -238,6 +324,7 @@ class ArenaService {
       final headers = await _getHeaders();
       final uri = Uri.parse(ApiConstants.openArenaRooms(loaiPhong: loaiPhong));
       final response = await http.get(uri, headers: headers);
+      _checkSessionResponse(response);
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
         if (decoded is List) {
@@ -331,6 +418,7 @@ class ArenaService {
         Uri.parse(ApiConstants.friendsList),
         headers: headers,
       );
+      _checkSessionResponse(response);
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
         final List raw = (decoded is Map && decoded['data'] is List)
@@ -341,10 +429,11 @@ class ArenaService {
           return {
             'maNguoiDung':
                 int.tryParse((m['MaNguoiDung'] ?? m['id'] ?? 0).toString()) ??
-                    0,
+                0,
             'hoTen': (m['HoTen'] ?? m['TenDangNhap'] ?? 'Bạn bè').toString(),
             'tenHang': (m['TenHang'] ?? 'Đồng').toString(),
-            'isOnline': m['TrangThaiOnline'] == true || m['TrangThaiOnline'] == 1,
+            'isOnline':
+                m['TrangThaiOnline'] == true || m['TrangThaiOnline'] == 1,
           };
         }).toList();
       }

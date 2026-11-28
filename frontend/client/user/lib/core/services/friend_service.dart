@@ -87,7 +87,6 @@ class FriendService {
     return _parseJsonMap(body);
   }
 
-  // Xem hồ sơ chi tiết của một người chơi / bạn bè
   Future<JsonMap> getFriendProfile(int targetUserId) async {
     final res = await ApiClient.get(ApiConstants.friendProfile(targetUserId));
     final body = _safeDecode(res.bodyBytes);

@@ -21,7 +21,6 @@ class _FavoriteExamsScreenState extends State<FavoriteExamsScreen> {
   bool _isLoading = true;
   int _totalFavorites = 0;
 
-  // Đã sửa kiểu dữ liệu
   List<Map<String, dynamic>> _topics = [];
 
   @override
@@ -43,7 +42,6 @@ class _FavoriteExamsScreenState extends State<FavoriteExamsScreen> {
           _totalFavorites =
               (data['total_favorites'] as num?)?.toInt() ?? 0;
 
-          // Đã sửa whereType<Map>()
           _topics = rawTopics
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))

@@ -38,10 +38,10 @@ class AttemptHistoryModel {
       tenChuDe: (json['TenChuDe'] ?? 'Chủ đề chung').toString(),
       trangThai: (json['TrangThai'] ?? '').toString(),
       thoiGianBatDau: json['ThoiGianBatDau'] != null
-          ? DateTime.tryParse(json['ThoiGianBatDau'].toString())
+          ? DateTime.tryParse(json['ThoiGianBatDau'].toString())?.toLocal()
           : null,
       thoiGianNopBai: json['ThoiGianNopBai'] != null
-          ? DateTime.tryParse(json['ThoiGianNopBai'].toString())
+          ? DateTime.tryParse(json['ThoiGianNopBai'].toString())?.toLocal()
           : null,
       thoiGianLamGiay:
           int.tryParse((json['ThoiGianLamGiay'] ?? 0).toString()) ?? 0,
@@ -152,7 +152,6 @@ class AttemptDetailModel {
       danhSachCauHoi.where((q) => q.daTraLoi && !q.traLoiDung).length;
 
   factory AttemptDetailModel.fromJson(Map<String, dynamic> json) {
-    // Backend trả về {"attempt": {...}, "questions": [...]}
     final Map<String, dynamic> attemptMap = json['attempt'] is Map
         ? Map<String, dynamic>.from(json['attempt'] as Map)
         : json;

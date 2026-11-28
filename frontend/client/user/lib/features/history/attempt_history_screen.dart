@@ -21,7 +21,7 @@ class _AttemptHistoryScreenState extends State<AttemptHistoryScreen>
   bool _isLoading = true;
   String? _error;
 
-  String _selectedType = 'ALL'; // ALL | THI_CHINH_THUC | LUYEN_TAP
+  String _selectedType = 'ALL';
   String _selectedTopic = 'ALL';
 
   @override

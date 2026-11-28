@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -40,7 +39,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final pass = passCtrl.text;
     final rePass = rePassCtrl.text;
 
-    // 1. Validate thông tin
     if (hoTen.isEmpty ||
         username.isEmpty ||
         email.isEmpty ||
@@ -75,12 +73,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     UserCredential? userCredential;
 
     try {
-      // 2. Tạo tài khoản Firebase Auth
       userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-        email: email,
-        password: pass,
-      );
+          .createUserWithEmailAndPassword(email: email, password: pass);
 
       final token = await userCredential.user?.getIdToken();
 
@@ -88,13 +82,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Không lấy được mã xác thực từ Firebase.');
       }
 
-      // 3. Gọi API đăng ký thông qua ApiConstants
       final response = await http.post(
         Uri.parse(ApiConstants.register),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
+          'ngrok-skip-browser-warning': 'true',
         },
         body: jsonEncode({
           'TenDangNhap': username,
@@ -104,27 +97,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
 
       if (response.statusCode != 201) {
-        // Rollback Firebase nếu lưu database thất bại
         await userCredential.user?.delete();
 
-        final err = jsonDecode(
-          utf8.decode(response.bodyBytes),
-        );
+        final err = jsonDecode(utf8.decode(response.bodyBytes));
 
         throw Exception(
           err['detail'] ?? 'Đăng ký thất bại (${response.statusCode}).',
         );
       }
 
-      // 4. Đăng xuất để người dùng đăng nhập lại
       await FirebaseAuth.instance.signOut();
 
       if (!mounted) return;
 
-      _showSnackBar(
-        'Đăng ký thành công! Vui lòng đăng nhập.',
-        Colors.green,
-      );
+      _showSnackBar('Đăng ký thành công! Vui lòng đăng nhập.', Colors.green);
 
       Navigator.pop(context);
     } on FirebaseAuthException catch (e) {
@@ -149,12 +135,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showSnackBar(String message, Color color) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message), backgroundColor: color));
   }
 
   @override
@@ -172,10 +155,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     'Tạo tài khoản',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -278,8 +258,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               backgroundColor: const Color(0xFF1D5CE5),
                               foregroundColor: Colors.white,
                             ),
-                            onPressed:
-                                _isLoading ? null : _handleRegister,
+                            onPressed: _isLoading ? null : _handleRegister,
                             child: _isLoading
                                 ? const SizedBox(
                                     height: 20,
